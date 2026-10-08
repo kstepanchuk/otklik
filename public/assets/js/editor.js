@@ -183,7 +183,7 @@
         imageField('Загрузить фон', theme.bg, (url) => { theme.bg = url; saveTheme(); }),
         imageField('Загрузить логотип', theme.logo, (url) => { theme.logo = url; saveTheme(); })),
       session.is_template ? null : h('div', { class: 'panel stack' }, h('h3', { text: 'Ссылки' }),
-        copy('Для участников', joinUrl), copy('Большой экран', screenUrl + ''), copy('Для вставки в презентацию', screenUrl + '&embed=1')),
+        copy('Для участников', joinUrl), copy('Большой экран', screenUrl + ''), copy('Для вставки в презентацию', screenUrl + '&embed=1'), copy('С прозрачным фоном, для OBS и Resolume', screenUrl + '&embed=1&transparent=1')),
     ];
   }
   const side = h('div');

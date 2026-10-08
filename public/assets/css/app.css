@@ -259,7 +259,7 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .screen-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 2vw; }
 .screen-top .title { font: 500 1em var(--display); color: var(--dim); display: flex; align-items: center; gap: .8em; }
 .screen-top .title img { height: 2.4em; width: auto; border-radius: 6px; }
-.mini-join { display: flex; align-items: center; gap: .9em; padding: .6em .7em .6em 1.1em; border-radius: .9em; box-shadow: 0 .3em 0 rgba(0, 0, 0, .18); }
+.mini-join { margin-left: auto; display: flex; align-items: center; gap: .9em; padding: .6em .7em .6em 1.1em; border-radius: .9em; box-shadow: 0 .3em 0 rgba(0, 0, 0, .18); }
 .mini-join .where { font-size: .78em; line-height: 1.25; }
 .mini-join .where b { display: block; font-weight: 600; }
 .mini-join .code-digits { font-size: 1.7em; line-height: 1; }
@@ -278,6 +278,14 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .keys-toggle:hover { background: var(--soft); color: var(--fg); }
 .timer { font: 700 1.6em var(--display); min-width: 2.6em; text-align: center; padding: .25em .5em; border-radius: .5em; background: var(--soft); color: var(--fg); font-variant-numeric: tabular-nums; }
 .timer.hot { background: var(--coral); color: #fff; }
+.stage.transparent { background: transparent !important; background-image: none !important; }
+.stage.transparent::before { display: none; }
+/* Поверх видео: плашки плотнее, у текста лёгкая тень, чтобы он читался на любом фоне. */
+.stage.transparent { --soft: rgba(10, 8, 30, .55); --softer: rgba(10, 8, 30, .4); --dim: rgba(255, 255, 255, .85); text-shadow: 0 .05em .35em rgba(0, 0, 0, .6); }
+.stage.transparent.light { --soft: rgba(255, 255, 255, .8); --softer: rgba(255, 255, 255, .6); --dim: #3d3866; text-shadow: 0 .05em .35em rgba(255, 255, 255, .7); }
+.stage.transparent .plate, .stage.transparent .card-a:nth-child(5n+1), .stage.transparent .leaders div:first-child, .stage.transparent .timer.hot { text-shadow: none; }
+.stage.transparent .spotlight { background: rgba(10, 8, 30, .82); }
+.stage.transparent.light .spotlight { background: rgba(255, 255, 255, .88); }
 .screen.embed .screen-top .title, .screen.embed .screen-bottom { display: none; }
 
 .lobby, .finish, .screen-main > .viz-empty { grid-row: 1 / -1; }

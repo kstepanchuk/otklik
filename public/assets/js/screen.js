@@ -10,6 +10,8 @@
   let last = null, offset = 0, view = '', busy = false, selfIdx = -1, reactSeen = null, beeped = 0, audio = null;
 
   if (params.get('embed')) root.classList.add('embed');
+  // Прозрачный фон — для наложения поверх видео в OBS, Resolume и подобных программах.
+  if (params.get('transparent')) { root.classList.add('transparent'); document.documentElement.style.background = 'transparent'; }
   if (!code) { main.append(h('div', { class: 'viz-empty', text: 'В адресе нет кода сессии. Откройте экран из кабинета.' })); return; }
 
   function buildMini() {
