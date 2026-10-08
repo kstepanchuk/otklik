@@ -236,7 +236,7 @@ const Viz = (() => {
 
   function info(el, q) {
     el._vizKey = 'info' + q.id;
-    el.replaceChildren(h('div', {}, q.s.body ? h('div', { class: 'info-body', text: q.s.body }) : null, q.s.image ? h('img', { class: 'info-img', src: q.s.image, alt: '' }) : null));
+    el.replaceChildren(h('div', { class: 'info-wrap' + (q.s.image ? ' with-img' : '') }, q.s.body ? h('div', { class: 'info-body', text: q.s.body }) : null, q.s.image ? h('img', { class: 'info-img', src: q.s.image, alt: '' }) : null));
   }
 
   /** o: { reveal, hidden } */

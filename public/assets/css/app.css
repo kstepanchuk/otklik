@@ -268,6 +268,9 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .screen-main { min-height: 0; display: grid; grid-template-rows: auto 1fr; gap: 1.4vw; }
 .screen-main .q-text { font: 700 clamp(26px, 3.3vw, 72px)/1.12 var(--display); letter-spacing: -.015em; max-width: 26em; text-wrap: balance; }
 .screen-main .viz { min-height: 0; position: relative; }
+/* Слайд без заголовка: вся высота достаётся содержимому. */
+.screen-main .q-text:empty { display: none; }
+.screen-main:has(.q-text:empty) { grid-template-rows: 1fr; }
 .screen-bottom { display: flex; justify-content: space-between; align-items: center; color: var(--dim); font-size: .9em; gap: 1em; }
 .screen-bottom b { color: var(--fg); font: 700 1.15em var(--display); margin-right: .3em; }
 .timer { font: 700 1.6em var(--display); min-width: 2.6em; text-align: center; padding: .25em .5em; border-radius: .5em; background: var(--soft); color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -366,7 +369,12 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .pin-center { display: grid; place-items: center; height: 100%; }
 
 .info-body { font-size: 1.5em; line-height: 1.4; color: var(--dim); max-width: 34em; white-space: pre-wrap; }
-.info-img { max-height: 52vh; border-radius: 1em; margin-top: 1em; }
+.info-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 1em; }
+.info-wrap.with-img { align-items: center; justify-content: center; }
+.info-wrap.with-img .info-body { text-align: center; flex: none; }
+.info-img { flex: 0 1 auto; min-height: 0; max-height: 100%; max-width: 100%; width: auto; object-fit: contain; border-radius: 1em; }
+.report-slide .info-wrap { height: auto; }
+.report-slide .info-img { max-height: 420px; }
 .comments { display: grid; gap: .5em; align-content: start; max-height: 100%; overflow: hidden; }
 .comments div { background: var(--soft); border-radius: .6em; padding: .5em .8em; font-size: .95em; }
 
