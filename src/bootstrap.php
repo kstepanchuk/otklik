@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 define('ROOT', dirname(__DIR__));
-define('PUBLIC_DIR', ROOT . '/public');
+// На хостинге корень сайта обычно называется public_html и лежит рядом с src.
+define('PUBLIC_DIR', is_dir(ROOT . '/public') ? ROOT . '/public' : ROOT . '/public_html');
 
 $CONFIG = require ROOT . '/config.example.php';
 if (is_file(ROOT . '/config.php')) {
