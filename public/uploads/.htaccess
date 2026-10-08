@@ -1,0 +1,9 @@
+# Картинки пользователей: скрипты здесь не выполняются.
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php5 .phar
+<FilesMatch "\.(php|phtml|phar|cgi|pl|py)$">
+  Require all denied
+</FilesMatch>
+Options -ExecCGI -Indexes
