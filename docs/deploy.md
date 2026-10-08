@@ -42,6 +42,16 @@ mv public_html public_html.old
 ln -s app/public public_html
 ```
 
+### Вариант без ссылки
+
+Если заменить `public_html` ссылкой нельзя, разложите файлы так: всё, кроме папки `public`, — в папку сайта рядом с `public_html`, а содержимое `public` — внутрь `public_html`. Сервис сам найдёт корень сайта под именем `public_html`. Стандартную страницу Beget `public_html/index.php` при этом нужно убрать, иначе она откроется вместо главной.
+
+```
+~/example.ru/
+  src/  bin/  storage/  config.php
+  public_html/   ← содержимое папки public
+```
+
 ## 4. Создайте настройки
 
 ```bash
