@@ -273,6 +273,9 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .screen-main:has(.q-text:empty) { grid-template-rows: 1fr; }
 .screen-bottom { display: flex; justify-content: space-between; align-items: center; color: var(--dim); font-size: .9em; gap: 1em; }
 .screen-bottom b { color: var(--fg); font: 700 1.15em var(--display); margin-right: .3em; }
+#keys { display: flex; align-items: center; gap: .6em; }
+.keys-toggle { width: 1.9em; height: 1.9em; border-radius: 50%; border: 1.5px solid var(--soft); background: transparent; color: var(--dim); font: 700 1.1em/1 var(--body); cursor: pointer; display: grid; place-items: center; padding: 0 0 .1em; }
+.keys-toggle:hover { background: var(--soft); color: var(--fg); }
 .timer { font: 700 1.6em var(--display); min-width: 2.6em; text-align: center; padding: .25em .5em; border-radius: .5em; background: var(--soft); color: var(--fg); font-variant-numeric: tabular-nums; }
 .timer.hot { background: var(--coral); color: #fff; }
 .screen.embed .screen-top .title, .screen.embed .screen-bottom { display: none; }

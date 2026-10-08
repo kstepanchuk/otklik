@@ -70,7 +70,21 @@
       r.data && view.startsWith('q') && r.q.type !== 'info' ? h('span', {}, ' ', h('b', { text: r.data.answered }), plural(r.data.answered, 'ответил', 'ответили', 'ответили')) : '');
     $('#index').textContent = r.index ? r.index + ' из ' + r.total : '';
     if (r.owner && !$('#keys').childElementCount) {
-      $('#keys').replaceChildren(h('span', { class: 'kbd', text: '→' }), ' дальше ', h('span', { class: 'kbd', text: 'H' }), ' скрыть результаты ', h('span', { class: 'kbd', text: 'Q' }), ' скрыть код ', h('span', { class: 'kbd', text: 'F' }), ' во весь экран');
+      const list = h('span', { class: 'keys-list' }, h('span', { class: 'kbd', text: '→' }), ' дальше\u2003', h('span', { class: 'kbd', text: 'H' }), ' скрыть результаты\u2003',
+        h('span', { class: 'kbd', text: 'Q' }), ' скрыть код\u2003', h('span', { class: 'kbd', text: 'F' }), ' во весь экран');
+      // Стрелка сворачивает подсказки; выбор запоминается в этом браузере.
+      let off = false;
+      try { off = localStorage.getItem('otklik:hints') === 'off'; } catch (e) { /* хранилище недоступно */ }
+      const toggle = h('button', { class: 'keys-toggle', type: 'button', onclick: () => { off = !off; try { localStorage.setItem('otklik:hints', off ? 'off' : 'on'); } catch (e) { /* не запомнится */ } paint(); toggle.blur(); } });
+      const paint = () => {
+        list.hidden = off;
+        toggle.textContent = off ? '‹' : '›';
+        toggle.setAttribute('aria-label', off ? 'Показать подсказки' : 'Скрыть подсказки');
+        toggle.title = off ? 'Показать подсказки' : 'Скрыть подсказки';
+        toggle.setAttribute('aria-expanded', off ? 'false' : 'true');
+      };
+      paint();
+      $('#keys').replaceChildren(list, toggle);
     }
 
     let sp = $('.spotlight');
