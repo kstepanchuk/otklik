@@ -181,6 +181,10 @@ function api_results(array $in): array
     if ($qq) {
         $out['q'] = public_question($qq, $reveal || $host);
         $out['data'] = aggregate($qq, $host, $reveal);
+        // Скрытые результаты не отдаются никому, кроме владельца: остаётся только число ответивших.
+        if ($s['hide_results'] && $s['phase'] === 'open' && !$owner && !in_array($qq['type'], ['info', 'qa'], true)) {
+            $out['data'] = ['answered' => $out['data']['answered']];
+        }
     }
     if ($s['phase'] === 'finished') {
         $out['leaders'] = leaderboard((int) $s['id'], 10);
@@ -229,7 +233,13 @@ function api_export(array $in): ?array
     header('Content-Disposition: attachment; filename="otklik-' . $s['code'] . '.csv"');
     $f = fopen('php://output', 'w');
     fwrite($f, "\xEF\xBB\xBF");
-    $put = fn(array $r) => fputcsv($f, $r, ';', '"', '');
+    // Защита от формул в Excel: текст, начинающийся со знака формулы, записывается как обычная строка.
+    // Касается всех ячеек, потому что имя участника тоже вводит посторонний человек.
+    $safe = function ($v) {
+        $v = (string) $v;
+        return $v !== '' && strpbrk($v[0], "=+-@\t\r") !== false && !is_numeric($v) ? "'" . $v : $v;
+    };
+    $put = fn(array $r) => fputcsv($f, array_map($safe, $r), ';', '"', '');
     $put(['Слайд', 'Тип', 'Вопрос', 'Участник', 'Ответ', 'Статус', 'Верно', 'Очки', 'Время']);
     $status = ['visible' => 'показан', 'hidden' => 'скрыт', 'pending' => 'на модерации'];
     $st = q('SELECT a.*, p.name FROM answers a LEFT JOIN participants p ON p.id = a.participant_id WHERE a.session_id = ? ORDER BY a.question_id, a.id', [$s['id']]);
@@ -239,10 +249,6 @@ function api_export(array $in): ?array
             continue;
         }
         $text = answer_text($qq, json_decode($a['value'], true));
-        // Защита от формул в Excel: ответ, начинающийся со знака формулы, записывается как текст.
-        if ($text !== '' && strpbrk($text[0], '=+-@') !== false && !is_numeric($text)) {
-            $text = "'" . $text;
-        }
         $put([
             $qq['n'], TYPE_NAMES[$qq['type']], $qq['text'], (string) $a['name'], $text, $status[$a['status']] ?? $a['status'],
             $a['is_correct'] === null ? '' : ((int) $a['is_correct'] ? 'да' : 'нет'), (int) $a['points'], date('Y-m-d H:i:s', (int) $a['created_at']),
@@ -284,9 +290,18 @@ function api_join(array $in): array
     if ($p) {
         q('UPDATE participants SET last_seen = ?, name = ? WHERE id = ?', [time(), $name !== '' ? $name : $p['name'], $p['id']]);
     } else {
-        if ((int) val('SELECT COUNT(*) FROM participants WHERE session_id = ?', [$s['id']]) >= 5000) {
-            fail('В сессии слишком много участников');
+        if ($s['archived']) {
+            fail('Сессия завершена и убрана в архив');
         }
+        // Защита от накрутки: с одного адреса в одну сессию — не больше 400 новых участников за 10 минут
+        // (в зале все телефоны часто выходят в сеть с одного адреса), всего в сессии — не больше 2000.
+        $key = 'join:' . $s['id'] . ':' . client_ip();
+        q('DELETE FROM login_attempts WHERE at < ?', [time() - 600]);
+        if ((int) val('SELECT COUNT(*) FROM login_attempts WHERE ip = ?', [$key]) >= 400
+            || (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ?', [$s['id']]) >= 2000) {
+            fail('Сейчас подключается слишком много участников. Повторите через несколько минут', 429);
+        }
+        q('INSERT INTO login_attempts (ip, at) VALUES (?, ?)', [$key, time()]);
         $token = bin2hex(random_bytes(16));
         q('INSERT INTO participants (session_id, token, name, last_seen, created_at) VALUES (?, ?, ?, ?, ?)', [$s['id'], $token, $name, time(), time()]);
         $p = ['id' => last_id(), 'name' => $name, 'score' => 0];
@@ -299,7 +314,7 @@ function api_join(array $in): array
     return [
         'token' => $token,
         'name' => $name !== '' ? $name : (string) $p['name'],
-        'score' => (int) $p['score'],
+        'score' => shown_score($s, $p + ['id' => 0]),
         'now' => now_ms(),
         'answers' => (object) $mine,
         'likes' => $likes,
@@ -339,6 +354,10 @@ function api_answer(array $in): array
     $given = (int) val('SELECT COUNT(*) FROM answers WHERE question_id = ? AND participant_id = ?', [$qq['id'], $p['id']]);
     if ($given >= $max) {
         fail($max === 1 ? 'Вы уже ответили' : "Можно отправить не больше $max ответов");
+    }
+    // Общий предел на слайд: сводка пересчитывается каждую секунду и не должна разрастаться без границ.
+    if ((int) val('SELECT COUNT(*) FROM answers WHERE question_id = ?', [$qq['id']]) >= 6000) {
+        fail('На этот слайд пришло слишком много ответов');
     }
     [$value, $correct, $points, $text] = validate_answer($qq, $in['value'] ?? null, $live);
 
@@ -386,6 +405,10 @@ function api_vote(array $in): array
     if (!$a) {
         fail('Вопрос не найден', 404);
     }
+    if (now_ms() - (int) $p['last_react'] < 300) {
+        fail('Слишком часто. Повторите через секунду', 429);
+    }
+    q('UPDATE participants SET last_react = ? WHERE id = ?', [now_ms(), $p['id']]);
     $liked = (bool) val('SELECT 1 FROM votes WHERE answer_id = ? AND participant_id = ?', [$a['id'], $p['id']]);
     if ($liked) {
         q('DELETE FROM votes WHERE answer_id = ? AND participant_id = ?', [$a['id'], $p['id']]);
@@ -412,17 +435,32 @@ function api_react(array $in): array
     return ['ok' => true];
 }
 
+/**
+ * Очки участника, какими их можно показать сейчас. Пока ведущий не показал верный ответ,
+ * очки за текущий слайд не учитываются: иначе по ним можно узнать ответ заранее.
+ */
+function shown_score(array $s, array $p): int
+{
+    $score = (int) $p['score'];
+    if ($s['mode'] === 'live' && in_array($s['phase'], ['open', 'closed'], true) && $s['current_question_id']) {
+        $score -= (int) val('SELECT COALESCE(SUM(points), 0) FROM answers WHERE question_id = ? AND participant_id = ?', [$s['current_question_id'], $p['id']]);
+    }
+    return $score;
+}
+
 function api_me(array $in): array
 {
     $s = live_session((string) ($in['code'] ?? ''));
     $p = participant($s, $in['token'] ?? null);
+    $revealed = $s['mode'] === 'self' || in_array($s['phase'], ['reveal', 'finished'], true);
+    $p['score'] = shown_score($s, $p);
     $out = [
         'score' => (int) $p['score'],
         'place' => 1 + (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ? AND score > ?', [$s['id'], $p['score']]),
         'players' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ? AND score > 0', [$s['id']]),
         'last' => null,
     ];
-    if (!empty($in['qid'])) {
+    if (!empty($in['qid']) && ($revealed || (int) $in['qid'] !== (int) $s['current_question_id'])) {
         $a = row('SELECT is_correct, points FROM answers WHERE question_id = ? AND participant_id = ? ORDER BY id DESC LIMIT 1', [(int) $in['qid'], $p['id']]);
         if ($a) {
             $out['last'] = ['is_correct' => $a['is_correct'] === null ? null : (int) $a['is_correct'], 'points' => (int) $a['points']];

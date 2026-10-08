@@ -16,6 +16,9 @@ function cfg(string $key, $default = null)
     return $CONFIG[$key] ?? $default;
 }
 
+// Подробности ошибок — только в журнал сервера, не в ответ.
+ini_set('display_errors', '0');
+
 require __DIR__ . '/db.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/mail.php';
@@ -37,6 +40,8 @@ function out($data): void
 {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: same-origin');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
@@ -53,7 +58,12 @@ function app_url(): string
     }
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    // Заголовок Host присылает клиент. Без app_url в config.php он попадает в ссылки из писем,
+    // поэтому на боевом сайте app_url должен быть задан; здесь отсекаем хотя бы явный мусор.
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    if (!preg_match('/^[a-z0-9.-]+(:\d{1,5})?$/i', $host)) {
+        $host = 'localhost';
+    }
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     return ($https ? 'https' : 'http') . '://' . $host . $dir;
 }

@@ -1,0 +1,11 @@
+# Список файлов в папках не показывается.
+Options -Indexes
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+  # Страницы кабинета нельзя встроить в чужой сайт; экран и телефон встраивать можно.
+  <FilesMatch "^(dashboard|editor|host|admin|report|login|register|reset)\.html$">
+    Header always set X-Frame-Options "SAMEORIGIN"
+  </FilesMatch>
+</IfModule>

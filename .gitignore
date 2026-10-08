@@ -3,6 +3,7 @@
 !/storage/.gitkeep
 /public/state/*
 !/public/state/.gitkeep
+!/public/state/.htaccess
 /public/uploads/*
 !/public/uploads/.gitkeep
 !/public/uploads/.htaccess

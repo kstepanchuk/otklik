@@ -11,6 +11,9 @@ echo 'Версия схемы: ', $pdo->query('PRAGMA user_version')->fetchColum
 foreach (['storage' => ROOT . '/storage', 'state' => PUBLIC_DIR . '/state', 'uploads' => PUBLIC_DIR . '/uploads'] as $name => $dir) {
     echo str_pad($name, 16), is_writable($dir) ? 'запись разрешена' : 'НЕТ ПРАВ НА ЗАПИСЬ', "\n";
 }
+if ((string) cfg('app_url') === '' && !cfg('mail_to_log')) {
+    echo "ВНИМАНИЕ: в config.php не задан app_url. Укажите адрес сайта, иначе ссылки в письмах можно подменить.\n";
+}
 foreach (['pdo_sqlite', 'mbstring', 'fileinfo', 'gd'] as $ext) {
     echo str_pad($ext, 16), extension_loaded($ext) ? 'есть' : 'НЕ УСТАНОВЛЕНО', "\n";
 }

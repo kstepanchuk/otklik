@@ -56,7 +56,9 @@ function builtin_templates(): array
 function add_slides(int $sessionId, array $slides): void
 {
     $pos = (int) val('SELECT COALESCE(MAX(position), 0) FROM questions WHERE session_id = ?', [$sessionId]);
-    foreach ($slides as $s) {
+    // В сессии не больше 200 слайдов, каким бы путём они ни добавлялись.
+    $room = max(0, 200 - (int) val('SELECT COUNT(*) FROM questions WHERE session_id = ?', [$sessionId]));
+    foreach (array_slice($slides, 0, $room) as $s) {
         [$type, $text, $options, $settings, $time] = $s;
         q(
             'INSERT INTO questions (session_id, position, type, text, options, settings, time_limit) VALUES (?, ?, ?, ?, ?, ?, ?)',

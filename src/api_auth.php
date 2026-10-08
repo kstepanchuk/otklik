@@ -11,14 +11,20 @@ function login_as(array $user): array
     start_session();
     session_regenerate_id(true);
     $_SESSION['uid'] = (int) $user['id'];
+    $_SESSION['pw'] = password_mark($user);
+    $_SESSION['csrf'] = bin2hex(random_bytes(16));
     return ['user' => public_user($user), 'csrf' => $_SESSION['csrf']];
 }
 
 function valid_password($p): string
 {
     $p = (string) $p;
-    if (mb_strlen($p) < 8 || mb_strlen($p) > 200) {
+    if (mb_strlen($p) < 8) {
         fail('Пароль должен быть не короче 8 символов');
+    }
+    // Алгоритм хеширования учитывает только первые 72 байта.
+    if (strlen($p) > 72) {
+        fail('Пароль слишком длинный: не больше 72 латинских или 36 русских букв');
     }
     return $p;
 }
@@ -36,13 +42,17 @@ function api_whoami(array $in): array
 
 function api_register(array $in): array
 {
-    throttle_login();
+    throttle_login('', 'register');
     $email = mb_strtolower(str_clean($in['email'] ?? '', 190));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         fail('Проверьте адрес почты');
     }
     $password = valid_password($in['password'] ?? '');
     $name = str_clean($in['name'] ?? '', 80);
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    // Проверка «первый ли это аккаунт», приглашение и запись — в одной транзакции:
+    // две одновременные регистрации не станут администраторами обе и не потратят одно приглашение дважды.
+    db()->exec('BEGIN IMMEDIATE');
     $first = !val('SELECT 1 FROM users LIMIT 1');
     $mode = registration_mode();
     $invite = null;
@@ -58,18 +68,22 @@ function api_register(array $in): array
         }
     }
     if (val('SELECT 1 FROM users WHERE email = ?', [$email])) {
-        note_failed_login();
+        db()->exec('ROLLBACK');
+        note_failed_login('', 'register');
         fail('Аккаунт с такой почтой уже есть. Войдите или восстановите пароль');
     }
     $verified = $first || $invite || !cfg('require_email_verification');
     q(
         'INSERT INTO users (email, password_hash, name, role, email_verified, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [$email, password_hash($password, PASSWORD_DEFAULT), $name, $first ? 'admin' : 'user', $verified ? 1 : 0, time()]
+        [$email, $hash, $name, $first ? 'admin' : 'user', $verified ? 1 : 0, time()]
     );
     $id = last_id();
     if ($invite) {
         q('UPDATE tokens SET used_at = ? WHERE id = ?', [time(), $invite['id']]);
     }
+    db()->exec('COMMIT');
+    // Успешная регистрация тоже считается: с одного адреса нельзя создать сотни аккаунтов и разослать сотни писем.
+    note_failed_login('', 'register');
     if (!$verified) {
         $token = make_token('verify', $id, $email, 86400 * 3);
         send_mail($email, 'Подтвердите почту', "Здравствуйте!\n\nЧтобы завершить регистрацию в сервисе «" . cfg('app_name') . "», откройте ссылку:\n" . app_url() . "/reset.html?verify=$token\n\nЕсли вы не регистрировались, просто не отвечайте на это письмо.");
@@ -80,11 +94,14 @@ function api_register(array $in): array
 
 function api_login(array $in): array
 {
-    throttle_login();
     $email = mb_strtolower(str_clean($in['email'] ?? '', 190));
+    throttle_login($email);
     $u = row('SELECT * FROM users WHERE email = ?', [$email]);
-    if (!$u || !password_verify((string) ($in['password'] ?? ''), $u['password_hash'])) {
-        note_failed_login();
+    // Для несуществующей почты проверяем пароль по фиктивному хешу: время ответа не выдаёт, есть ли аккаунт.
+    $hash = $u ? $u['password_hash'] : '$2y$10$abcdefghijklmnopqrstuuJ8l7p3mQ0m0m0m0m0m0m0m0m0m0m0mO';
+    $ok = password_verify((string) ($in['password'] ?? ''), $hash);
+    if (!$u || !$ok) {
+        note_failed_login($email);
         fail('Неверная почта или пароль', 401);
     }
     if ($u['status'] !== 'active') {
@@ -116,9 +133,9 @@ function api_verify(array $in): array
 
 function api_forgot(array $in): array
 {
-    throttle_login();
-    note_failed_login();
     $email = mb_strtolower(str_clean($in['email'] ?? '', 190));
+    throttle_login($email, 'forgot');
+    note_failed_login($email, 'forgot');
     $u = row("SELECT * FROM users WHERE email = ? AND status = 'active'", [$email]);
     if ($u) {
         $token = make_token('reset', (int) $u['id'], $email, 3600 * 2);
@@ -137,6 +154,8 @@ function api_reset(array $in): array
     }
     // Переход по ссылке из письма подтверждает и почту.
     q('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $t['user_id']]);
+    // Остальные ссылки для сброса этого аккаунта больше не действуют.
+    q("UPDATE tokens SET used_at = ? WHERE user_id = ? AND kind = 'reset' AND used_at IS NULL", [time(), $t['user_id']]);
     return login_as(row('SELECT * FROM users WHERE id = ?', [$t['user_id']]));
 }
 
@@ -158,5 +177,7 @@ function api_password_change(array $in): array
         fail('Текущий пароль введён неверно');
     }
     q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash(valid_password($in['new'] ?? ''), PASSWORD_DEFAULT), $u['id']]);
+    // Текущий вход остаётся, остальные завершаются: их отметка пароля перестаёт совпадать.
+    $_SESSION['pw'] = password_mark(row('SELECT * FROM users WHERE id = ?', [$u['id']]));
     return ['ok' => true];
 }

@@ -28,6 +28,11 @@ function h(tag, attrs, ...children) {
 
 const App = { csrf: null, user: null, info: {} };
 
+// Страницы кабинета не должны открываться внутри чужого сайта. Экран и телефон встраивать можно.
+if (window.top !== window.self && !/\/(screen|play)\.html$/.test(location.pathname)) {
+  try { window.top.location = window.self.location.href; } catch (e) { document.documentElement.hidden = true; }
+}
+
 async function request(method, action, data) {
   let url = 'api.php?a=' + action;
   const opts = { method, headers: {}, credentials: 'same-origin' };

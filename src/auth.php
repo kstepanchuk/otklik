@@ -7,7 +7,9 @@ function start_session(): void
         return;
     }
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
+        || stripos((string) cfg('app_url', ''), 'https://') === 0;
+    ini_set('session.use_strict_mode', '1');
     session_name('otklik');
     session_set_cookie_params([
         'lifetime' => 60 * 60 * 24 * 30,
@@ -38,6 +40,10 @@ function current_user(bool $forceStart = false): ?array
         return $user = null;
     }
     $u = row('SELECT * FROM users WHERE id = ?', [$id]);
+    // Смена или сброс пароля завершает все остальные входы в этот аккаунт.
+    if ($u && !hash_equals(password_mark($u), (string) ($_SESSION['pw'] ?? ''))) {
+        $u = null;
+    }
     if (!$u || $u['status'] !== 'active') {
         unset($_SESSION['uid']);
         return $user = null;
@@ -86,6 +92,7 @@ function public_user(array $u): array
 function make_token(string $kind, ?int $userId, string $email, int $ttl): string
 {
     $token = bin2hex(random_bytes(24));
+    q('DELETE FROM tokens WHERE expires_at < ?', [time() - 86400 * 30]);
     q(
         'INSERT INTO tokens (user_id, email, kind, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
         [$userId, $email, $kind, hash('sha256', $token), time() + $ttl]
@@ -100,21 +107,42 @@ function use_token(string $kind, string $token, bool $consume = true): ?array
         [hash('sha256', $token), $kind, time()]
     );
     if ($t && $consume) {
-        q('UPDATE tokens SET used_at = ? WHERE id = ?', [time(), $t['id']]);
+        // Ссылка одноразовая даже при двух одновременных запросах: засчитывается только первый.
+        if (q('UPDATE tokens SET used_at = ? WHERE id = ? AND used_at IS NULL', [time(), $t['id']])->rowCount() !== 1) {
+            return null;
+        }
     }
     return $t;
 }
 
-function throttle_login(): void
+function password_mark(array $user): string
 {
-    $since = time() - 600;
-    q('DELETE FROM login_attempts WHERE at < ?', [$since]);
-    if ((int) val('SELECT COUNT(*) FROM login_attempts WHERE ip = ?', [client_ip()]) >= 10) {
-        fail('Слишком много попыток. Повторите через 10 минут', 429);
+    return substr(hash('sha256', (string) $user['password_hash']), 0, 24);
+}
+
+/**
+ * Ограничение попыток: отдельные счётчики на адрес клиента и на почту.
+ * Счётчик по адресу высокий, потому что за одним адресом может сидеть целый зал;
+ * подбор пароля к одному аккаунту с разных адресов останавливает счётчик по почте.
+ */
+function throttle_login(string $email = '', string $kind = 'login'): void
+{
+    q('DELETE FROM login_attempts WHERE at < ?', [time() - 600]);
+    $limits = [$kind . ':ip:' . client_ip() => $kind === 'login' ? 30 : 8];
+    if ($email !== '') {
+        $limits[$kind . ':mail:' . hash('sha256', $email)] = $kind === 'login' ? 8 : 3;
+    }
+    foreach ($limits as $key => $max) {
+        if ((int) val('SELECT COUNT(*) FROM login_attempts WHERE ip = ?', [$key]) >= $max) {
+            fail('Слишком много попыток. Повторите через 10 минут', 429);
+        }
     }
 }
 
-function note_failed_login(): void
+function note_failed_login(string $email = '', string $kind = 'login'): void
 {
-    q('INSERT INTO login_attempts (ip, at) VALUES (?, ?)', [client_ip(), time()]);
+    q('INSERT INTO login_attempts (ip, at) VALUES (?, ?)', [$kind . ':ip:' . client_ip(), time()]);
+    if ($email !== '') {
+        q('INSERT INTO login_attempts (ip, at) VALUES (?, ?)', [$kind . ':mail:' . hash('sha256', $email), time()]);
+    }
 }

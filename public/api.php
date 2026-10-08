@@ -21,8 +21,17 @@ try {
         fail('Неизвестное действие', 404);
     }
     if ($method === 'POST') {
-        $in = json_decode((string) file_get_contents('php://input'), true);
-        $in = is_array($in) ? $in : $_POST;
+        if ($action === 'upload') {
+            $in = $_POST;
+        } else {
+            // Тело принимается только как JSON с соответствующим заголовком: обычная HTML-форма
+            // с чужого сайта такой запрос отправить не может, поэтому вход и регистрацию нельзя подделать.
+            if (stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') !== 0) {
+                fail('Ожидается запрос в формате JSON', 415);
+            }
+            $in = json_decode((string) file_get_contents('php://input'), true);
+            $in = is_array($in) ? $in : [];
+        }
     } else {
         if (!in_array($action, READ_ONLY, true)) {
             fail('Это действие вызывается методом POST', 405);

@@ -228,10 +228,18 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
                     $data['words'][] = ['w' => (string) $w, 'n' => $c];
                 }
                 if ($host) {
-                    $data['items'] = array_values($items);
+                    $data['items'] = array_slice(array_values($items), -500);
                 }
             } else {
-                $data['items'] = array_values($items);
+                $items = array_values($items);
+                if ($type === 'qa') {
+                    // Вопросы спикеру: неотвеченные и самые поддержанные — первыми, не больше 150.
+                    usort($items, fn($a, $b) => [$a['answered'], -$a['likes'], $a['id']] <=> [$b['answered'], -$b['likes'], $b['id']]);
+                    $items = array_slice($items, 0, $host ? 500 : 150);
+                } else {
+                    $items = array_slice($items, $host ? -500 : -150);
+                }
+                $data['items'] = $items;
             }
             break;
 
@@ -316,7 +324,7 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
             $total = array_sum($dist);
             $data['dist'] = $dist;
             $data['nps'] = $total ? (int) round((array_sum(array_slice($dist, 9)) - array_sum(array_slice($dist, 0, 7))) * 100 / $total) : null;
-            $data['items'] = $items;
+            $data['items'] = array_slice($items, $host ? -500 : -100);
             break;
     }
 
