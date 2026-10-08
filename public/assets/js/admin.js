@@ -67,7 +67,26 @@
     reg.value = r.registration;
     const len = h('input', { class: 'input', type: 'number', min: 20, max: 1000, value: r.max_answer_len });
     const mb = h('input', { class: 'input', type: 'number', min: 1, max: 10, value: r.max_upload_mb });
-    const words = h('textarea', { class: 'input', rows: 5, value: r.stopwords, placeholder: 'слово1, слово2' });
+    const words = h('textarea', { class: 'input', rows: 8, value: r.stopwords, placeholder: 'слово1, слово2' });
+    const count = h('span', { class: 'hint' });
+    const recount = () => { const n = words.value.split(/[\s,;]+/).filter(Boolean).length; count.textContent = 'В списке: ' + n + ' ' + plural(n, 'слово', 'слова', 'слов'); };
+    words.addEventListener('input', recount);
+    recount();
+    // Готовый словарь загружается из текстового файла: слова дописываются к уже введённым.
+    const loadFile = h('button', { class: 'btn small ghost', type: 'button', style: { justifySelf: 'start' }, text: 'Загрузить список из файла .txt', onclick: () => {
+      const input = h('input', { type: 'file', accept: '.txt,.csv,text/plain' });
+      input.onchange = async () => {
+        if (!input.files[0]) return;
+        if (input.files[0].size > 250000) { toast('Файл больше 250 КБ. Разделите его или положите на сервер как storage/stopwords.txt', true); return; }
+        const text = await input.files[0].text();
+        const have = new Set(words.value.toLowerCase().split(/[\s,;]+/).filter(Boolean));
+        const add = text.toLowerCase().split(/[\s,;]+/).filter((w) => w.length >= 3 && !have.has(w));
+        words.value = [...have, ...new Set(add)].join('\n');
+        recount();
+        toast('Добавлено слов: ' + new Set(add).size + '. Нажмите «Сохранить настройки»');
+      };
+      input.click();
+    } });
     box.replaceChildren(h('form', { class: 'panel stack', style: { maxWidth: '640px' }, onsubmit: async (e) => {
       e.preventDefault();
       try { await apiPost('admin_settings_save', { registration: reg.value, max_answer_len: len.value, max_upload_mb: mb.value, stopwords: words.value }); toast('Настройки сохранены'); } catch (ex) { oops(ex); }
@@ -76,7 +95,8 @@
     h('label', { class: 'field' }, h('span', { text: 'Наибольшая длина текстового ответа, символов' }), len),
     h('label', { class: 'field' }, h('span', { text: 'Наибольший размер картинки, МБ' }), mb),
     h('label', { class: 'field' }, h('span', { text: 'Дополнительные стоп-слова' }), words,
-      h('span', { class: 'hint', text: 'Через запятую или с новой строки. Ответ скрывается, если слово в нём начинается с одного из этих. Встроенный список уже содержит основ: ' + r.builtin_stopwords + '.' })),
+      h('span', { class: 'hint', text: 'Через запятую или с новой строки, не короче трёх букв. Ответ скрывается, если слово в нём начинается с одного из этих. Встроенный список уже содержит основ: ' + r.builtin_stopwords + '.' + (r.file_stopwords ? ' Дополнительно подключён файл storage/stopwords.txt.' : '') })),
+    count, loadFile,
     h('button', { class: 'btn', type: 'submit', style: { justifySelf: 'start' }, text: 'Сохранить настройки' })));
   }
 

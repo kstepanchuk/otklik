@@ -114,6 +114,7 @@ function api_admin_settings(array $in): array
         'max_upload_mb' => (int) setting('max_upload_mb', 3),
         'stopwords' => (string) setting('stopwords', ''),
         'builtin_stopwords' => count(default_stopwords()) + count(stopwords_anywhere()),
+        'file_stopwords' => is_file(ROOT . '/storage/stopwords.txt'),
     ];
 }
 
@@ -124,7 +125,7 @@ function api_admin_settings_save(array $in): array
         'registration' => in_array($in['registration'] ?? '', ['open', 'invite', 'closed'], true) ? $in['registration'] : 'open',
         'max_answer_len' => (string) max(20, min(1000, (int) ($in['max_answer_len'] ?? 300))),
         'max_upload_mb' => (string) max(1, min(10, (int) ($in['max_upload_mb'] ?? 3))),
-        'stopwords' => str_clean($in['stopwords'] ?? '', 5000),
+        'stopwords' => str_clean($in['stopwords'] ?? '', 300000),
     ];
     foreach ($values as $k => $v) {
         q('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [$k, $v]);
