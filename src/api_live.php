@@ -80,6 +80,9 @@ function api_toggle(array $in): array
     if (isset($in['hide_results'])) {
         q('UPDATE sessions SET hide_results = ? WHERE id = ?', [(int) !empty($in['hide_results']), $s['id']]);
     }
+    if (isset($in['hide_join'])) {
+        q('UPDATE sessions SET hide_join = ? WHERE id = ?', [(int) !empty($in['hide_join']), $s['id']]);
+    }
     if (array_key_exists('spotlight', $in)) {
         $aid = (int) $in['spotlight'];
         if ($aid && !val('SELECT 1 FROM answers WHERE id = ? AND session_id = ?', [$aid, $s['id']])) {
@@ -154,6 +157,7 @@ function api_results(array $in): array
         'mode' => $s['mode'],
         'phase' => $s['phase'],
         'hide_results' => (int) $s['hide_results'],
+        'hide_join' => (int) $s['hide_join'],
         'theme' => clean_theme(json_decode($s['theme'] ?: '{}', true)),
         'now' => now_ms(),
         'online' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ? AND last_seen > ?', [$s['id'], time() - 75]),

@@ -63,14 +63,14 @@
     if (r.phase === 'finished' && !self) finished(r);
     else if (showLobby) lobby(r);
     else question(r);
-    $('#mini').hidden = view === 'lobby';
+    $('#mini').hidden = view === 'lobby' || !!r.hide_join;
 
     $('#counts').replaceChildren(
       h('b', { text: r.online }), 'в сети',
       r.data && view.startsWith('q') && r.q.type !== 'info' ? h('span', {}, ' ', h('b', { text: r.data.answered }), plural(r.data.answered, 'ответил', 'ответили', 'ответили')) : '');
     $('#index').textContent = r.index ? r.index + ' из ' + r.total : '';
     if (r.owner && !$('#keys').childElementCount) {
-      $('#keys').replaceChildren(h('span', { class: 'kbd', text: '→' }), ' дальше ', h('span', { class: 'kbd', text: 'H' }), ' скрыть результаты ', h('span', { class: 'kbd', text: 'F' }), ' во весь экран');
+      $('#keys').replaceChildren(h('span', { class: 'kbd', text: '→' }), ' дальше ', h('span', { class: 'kbd', text: 'H' }), ' скрыть результаты ', h('span', { class: 'kbd', text: 'Q' }), ' скрыть код ', h('span', { class: 'kbd', text: 'F' }), ' во весь экран');
     }
 
     let sp = $('.spotlight');
@@ -159,6 +159,8 @@
       act('goto', { dir: 'prev' });
     } else if (k === 'h' || k === 'р') {
       act('toggle', { hide_results: last.hide_results ? 0 : 1 });
+    } else if (k === 'q' || k === 'й') {
+      act('toggle', { hide_join: last.hide_join ? 0 : 1 });
     }
   });
 

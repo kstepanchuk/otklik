@@ -156,6 +156,7 @@ function migrations(): array
             value TEXT NOT NULL
         );
         ",
+        2 => "ALTER TABLE sessions ADD COLUMN hide_join INTEGER NOT NULL DEFAULT 0;",
     ];
 }
 

@@ -44,7 +44,7 @@
   function drawControls(r) {
     const btn = (label, fn, cls) => h('button', { class: 'btn ' + (cls || ''), type: 'button', text: label, onclick: fn });
     const q = r.q, parts = [];
-    if (!changed('controls', [r.phase, q && q.id, q && q.type, r.hide_results, r.index, r.total])) return;
+    if (!changed('controls', [r.phase, q && q.id, q && q.type, r.hide_results, r.hide_join, r.index, r.total])) return;
     if (self) {
       parts.push(h('span', { class: 'hint', text: 'Участники проходят слайды сами. Выберите слайд слева, чтобы посмотреть ответы.' }));
     } else if (r.phase === 'lobby') {
@@ -59,6 +59,7 @@
         if (scored && r.phase !== 'reveal') parts.push(btn('Показать верный ответ', () => act('phase', { phase: 'reveal' }), 'sun'));
         if (r.phase === 'open') parts.push(btn(r.hide_results ? 'Показать результаты залу' : 'Скрыть результаты от зала', () => act('toggle', { hide_results: r.hide_results ? 0 : 1 }), 'ghost'));
       }
+      parts.push(btn(r.hide_join ? 'Показать код и QR на экране' : 'Скрыть код и QR на экране', () => act('toggle', { hide_join: r.hide_join ? 0 : 1 }), 'ghost'));
       parts.push(h('div', { class: 'grow' }), btn('Назад', () => act('goto', { dir: 'prev' }), 'ghost'),
         btn(r.index === r.total ? 'Завершить сессию' : 'Следующий слайд', () => act('goto', { dir: 'next' })));
     }
@@ -99,7 +100,8 @@
       r.data ? h('span', { class: 'counter' }, r.data.answered, h('small', { text: plural(r.data.answered, 'ответил', 'ответили', 'ответили') })) : '',
       r.q && r.q.time_limit && r.phase === 'open' && !self ? h('span', { class: 'tag warn', text: 'Осталось ' + Math.max(0, Math.ceil((r.q.opened_at + r.q.time_limit * 1000 - r.now) / 1000)) + ' с' }) : '',
       !self && r.phase !== 'lobby' && r.phase !== 'finished' ? h('span', { class: 'tag ' + (r.phase === 'open' ? 'live' : 'off'), text: { open: 'Приём открыт', closed: 'Приём закрыт', reveal: 'Ответ показан' }[r.phase] }) : '',
-      r.hide_results ? h('span', { class: 'tag warn', text: 'Результаты скрыты от зала' }) : '');
+      r.hide_results ? h('span', { class: 'tag warn', text: 'Результаты скрыты от зала' }) : '',
+      r.hide_join ? h('span', { class: 'tag off', text: 'Код и QR скрыты' }) : '');
     if (r.q) {
       qText.textContent = r.q.text;
       Viz.render(viz, r.q, r.data, { reveal: true });
@@ -138,7 +140,7 @@
     h('div', { class: 'host' },
       h('div', { class: 'stack' }, h('h3', { text: 'Слайды' }), slides),
       h('div', { class: 'stack' }, counters, stage, controls,
-        h('p', { class: 'hint' }, 'Слайды переключаются и стрелками ', h('span', { class: 'kbd', text: '←' }), ' ', h('span', { class: 'kbd', text: '→' }), '. На большом экране: ', h('span', { class: 'kbd', text: 'H' }), ' скрывает результаты, ', h('span', { class: 'kbd', text: 'F' }), ' включает полный экран.')),
+        h('p', { class: 'hint' }, 'Слайды переключаются и стрелками ', h('span', { class: 'kbd', text: '←' }), ' ', h('span', { class: 'kbd', text: '→' }), '. На большом экране: ', h('span', { class: 'kbd', text: 'H' }), ' скрывает результаты, ', h('span', { class: 'kbd', text: 'Q' }), ' скрывает код и QR, ', h('span', { class: 'kbd', text: 'F' }), ' включает полный экран.')),
       h('div', { class: 'panel stack' }, feedTitle, feed))));
   poll();
   setInterval(poll, 1000);
