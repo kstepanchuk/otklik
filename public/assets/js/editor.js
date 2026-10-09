@@ -145,12 +145,13 @@
         h('div', { class: 'grow' }, labeled('Подпись слева', h('input', { class: 'input', maxlength: 40, value: s.label_min || '', placeholder: 'Плохо', oninput: (e) => set('label_min', e.target.value) }))),
         h('div', { class: 'grow' }, labeled('Подпись справа', h('input', { class: 'input', maxlength: 40, value: s.label_max || '', placeholder: 'Отлично', oninput: (e) => set('label_max', e.target.value) })))));
     }
+    if (q.type === 'open') parts.push(switchField('Лайки на ответах', 'Участники видят чужие ответы на телефоне и отмечают близкие. На экране самые поддержанные идут первыми.', !!s.likes, (v) => set('likes', v)));
     if (q.type === 'open') parts.push(labeled('Сколько ответов может отправить один человек', select(s.max_answers || 3, [[1, '1'], [2, '2'], [3, '3'], [5, '5'], [10, '10']], (v) => set('max_answers', +v))));
     if (q.type === 'number') parts.push(labeled('Верный ответ', h('input', { class: 'input', inputmode: 'decimal', value: s.correct ?? '', placeholder: 'Например, 206', oninput: (e) => set('correct', e.target.value.trim()) }), 'Чем ближе ответ участника, тем больше очков. Оставьте пустым, если верного ответа нет.'));
     if (q.type === 'info') parts.push(labeled('Текст', h('textarea', { class: 'input', rows: 4, maxlength: 1000, value: s.body || '', oninput: (e) => set('body', e.target.value) })));
     if (q.type === 'info' || q.type === 'pin') parts.push(imageField('Загрузить картинку', s.image, (url) => { set('image', url); drawEditor(); }));
     if (q.type === 'pin' && !s.image) parts.push(h('p', { class: 'error-text', text: 'Загрузите картинку — участники будут ставить на ней отметки.' }));
-    if (['quiz', 'number'].includes(q.type)) parts.push(labeled('Время на ответ', select(q.time_limit, [[0, 'Без таймера'], [10, '10 секунд'], [20, '20 секунд'], [30, '30 секунд'], [60, '1 минута'], [120, '2 минуты']], (v) => { q.time_limit = +v; touch(q); }), q.type === 'quiz' ? 'С таймером за быстрый верный ответ дают до 1000 очков, за медленный — от 500.' : ''));
+    if (q.type !== 'info') parts.push(labeled('Время на ответ', select(q.time_limit, [[0, 'Без таймера'], [10, '10 секунд'], [20, '20 секунд'], [30, '30 секунд'], [60, '1 минута'], [120, '2 минуты'], [180, '3 минуты'], [300, '5 минут']], (v) => { q.time_limit = +v; touch(q); }), q.type === 'quiz' ? 'С таймером за быстрый верный ответ дают до 1000 очков, за медленный — от 500.' : 'Когда время выйдет, приём ответов закроется сам. Отсчёт виден на экране и на телефонах.'));
     if (['poll', 'quiz', 'scale', 'rank', 'number'].includes(q.type)) parts.push(switchField('Скрыть результаты до закрытия приёма', 'Зрители не видят, как голосуют другие, и не подстраиваются под большинство.', !!s.hide_results, (v) => set('hide_results', v)));
     if (['poll', 'scale'].includes(q.type)) {
       const ref = s.compare_with && questions.find((x) => x.id === s.compare_with);
@@ -182,10 +183,29 @@
         h('div', { class: 'theme-swatches', role: 'group', 'aria-label': 'Цвет акцента' }, ACCENTS.map((c) => h('button', { type: 'button', class: theme.accent === c ? 'on' : '', style: { background: c }, 'aria-label': 'Цвет ' + c, 'aria-pressed': theme.accent === c ? 'true' : 'false', onclick: () => { theme.accent = c; saveTheme(); } }))),
         imageField('Загрузить фон', theme.bg, (url) => { theme.bg = url; saveTheme(); }),
         imageField('Загрузить логотип', theme.logo, (url) => { theme.logo = url; saveTheme(); })),
+      h('div', { class: 'panel stack' }, h('h3', { text: 'Команды' }),
+        h('textarea', { class: 'input', rows: 3, placeholder: 'Синие\nКрасные', value: (session.teams || []).join('\n'), 'aria-label': 'Названия команд, по одному в строке',
+          onchange: (e) => saveSession({ teams: e.target.value.split('\n').map((t) => t.trim()).filter(Boolean) }) }),
+        h('p', { class: 'hint', text: 'По одной команде в строке, до восьми. Участник выбирает команду при входе; в викторине на экране показывается средний счёт команд. Пустое поле — без команд.' })),
+      session.is_template ? null : accessBox,
       session.is_template ? null : h('div', { class: 'panel stack' }, h('h3', { text: 'Ссылки' }),
         copy('Для участников', joinUrl), copy('Большой экран', screenUrl + ''), copy('Для вставки в презентацию', screenUrl + '&embed=1'), copy('С прозрачным фоном, для OBS и Resolume', screenUrl + '&embed=1&transparent=1')),
     ];
   }
+  // Общий доступ: второй спикер ведёт и редактирует сессию из своего аккаунта.
+  const accessBox = h('div', { class: 'panel stack' });
+  function drawAccess(r) {
+    const email = h('input', { class: 'input grow', type: 'email', placeholder: 'Почта зарегистрированного спикера', 'aria-label': 'Почта спикера' });
+    const add = async () => { if (!email.value.trim()) return; try { const before = r.members.length; const x = await apiPost('session_member_add', { id, email: email.value }); if (x.members.length === before) toast('Доступ не выдан: проверьте почту. Спикер должен быть зарегистрирован', true); drawAccess(x); } catch (e) { oops(e); } };
+    accessBox.replaceChildren(h('h3', { text: 'Общий доступ' }),
+      r.members.length ? h('div', { class: 'stack', style: { gap: '6px' } }, r.members.map((m) => h('div', { class: 'row' }, h('span', { class: 'grow', style: { fontSize: '14px', overflowWrap: 'anywhere' }, text: m.name ? m.name + ' — ' + m.email : m.email }),
+        r.owner ? h('button', { class: 'btn small danger', type: 'button', text: 'Убрать', onclick: async () => { try { drawAccess(await apiPost('session_member_remove', { id, user_id: m.id })); } catch (e) { oops(e); } } }) : null)))
+        : h('p', { class: 'hint', text: 'Сессию видите только вы.' }),
+      r.owner ? h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); add(); } }, email, h('button', { class: 'btn small', type: 'submit', text: 'Дать доступ' })) : null,
+      h('p', { class: 'hint', text: r.owner ? 'Спикер с доступом может менять слайды, вести сессию и смотреть отчёт. Удалить сессию и менять доступ может только владелец.' : 'Вам выдали доступ к этой сессии. Менять доступ и удалять её может только владелец.' }));
+  }
+  apiGet('session_members', { id }).then(drawAccess).catch(() => {});
+
   const side = h('div');
   const drawSide = () => side.replaceChildren(...settingsPanel().filter(Boolean));
 

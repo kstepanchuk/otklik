@@ -17,14 +17,52 @@ function clean_theme($t): array
     ];
 }
 
-function own_session($id): array
+/**
+ * Сессия, с которой текущий пользователь может работать: своя, чужая с выданным доступом или любая для администратора.
+ * $ownerOnly — действия, доступные только владельцу: удаление и управление доступом.
+ */
+function own_session($id, bool $ownerOnly = false): array
 {
     $u = require_user();
     $s = row('SELECT * FROM sessions WHERE id = ?', [(int) $id]);
-    if (!$s || ((int) $s['user_id'] !== (int) $u['id'] && $u['role'] !== 'admin')) {
+    $mine = $s && ((int) $s['user_id'] === (int) $u['id'] || $u['role'] === 'admin');
+    $shared = $s && !$mine && val('SELECT 1 FROM session_members WHERE session_id = ? AND user_id = ?', [$s['id'], $u['id']]);
+    if (!$s || (!$mine && !$shared)) {
         fail('Сессия не найдена', 404);
     }
+    if ($ownerOnly && !$mine) {
+        fail('Это может сделать только владелец сессии', 403);
+    }
     return $s;
+}
+
+function api_session_members(array $in): array
+{
+    $s = own_session($in['id'] ?? 0);
+    return ['members' => rows('SELECT u.id, u.email, u.name FROM session_members m JOIN users u ON u.id = m.user_id WHERE m.session_id = ? ORDER BY u.email', [$s['id']]),
+        'owner' => (int) $s['user_id'] === (int) require_user()['id'] || require_user()['role'] === 'admin'];
+}
+
+function api_session_member_add(array $in): array
+{
+    $s = own_session($in['id'] ?? 0, true);
+    $email = mb_strtolower(str_clean($in['email'] ?? '', 190));
+    $u = row("SELECT id FROM users WHERE email = ? AND status = 'active'", [$email]);
+    // Ответ одинаков для существующей и несуществующей почты: по нему нельзя проверить, кто зарегистрирован.
+    if ($u && (int) $u['id'] !== (int) $s['user_id']) {
+        if ((int) val('SELECT COUNT(*) FROM session_members WHERE session_id = ?', [$s['id']]) >= 20) {
+            fail('Доступ можно дать не более чем 20 людям');
+        }
+        q('INSERT OR IGNORE INTO session_members (session_id, user_id) VALUES (?, ?)', [$s['id'], $u['id']]);
+    }
+    return ['ok' => true] + api_session_members(['id' => $s['id']]);
+}
+
+function api_session_member_remove(array $in): array
+{
+    $s = own_session($in['id'] ?? 0, true);
+    q('DELETE FROM session_members WHERE session_id = ? AND user_id = ?', [$s['id'], (int) ($in['user_id'] ?? 0)]);
+    return ['ok' => true] + api_session_members(['id' => $s['id']]);
 }
 
 function own_question($id): array
@@ -46,6 +84,7 @@ function session_view(array $s): array
         'theme' => clean_theme(json_decode($s['theme'] ?: '{}', true)),
         'phase' => $s['phase'], 'current_question_id' => $s['current_question_id'] ? (int) $s['current_question_id'] : null,
         'archived' => (int) $s['archived'], 'is_template' => (int) $s['is_template'], 'created_at' => (int) $s['created_at'],
+        'teams' => session_teams($s),
     ];
 }
 
@@ -76,7 +115,7 @@ function clean_question(array $in): array
     }
     $raw = (array) ($in['settings'] ?? []);
     $s = [];
-    foreach (['multi', 'hide_results'] as $k) {
+    foreach (['multi', 'hide_results', 'likes'] as $k) {
         if (!empty($raw[$k])) {
             $s[$k] = true;
         }
@@ -114,10 +153,10 @@ function api_sessions_list(array $in): array
             (SELECT COUNT(*) FROM questions WHERE session_id = s.id) AS slides,
             (SELECT COUNT(*) FROM participants WHERE session_id = s.id) AS people,
             (SELECT COUNT(*) FROM answers WHERE session_id = s.id) AS answers
-         FROM sessions s WHERE s.user_id = ? ORDER BY s.id DESC',
-        [$u['id']]
+         FROM sessions s WHERE s.user_id = ? OR s.id IN (SELECT session_id FROM session_members WHERE user_id = ?) ORDER BY s.id DESC',
+        [$u['id'], $u['id']]
     );
-    return ['sessions' => array_map(fn($s) => session_view($s) + ['slides' => (int) $s['slides'], 'people' => (int) $s['people'], 'answers' => (int) $s['answers']], $list)];
+    return ['sessions' => array_map(fn($s) => session_view($s) + ['slides' => (int) $s['slides'], 'people' => (int) $s['people'], 'answers' => (int) $s['answers'], 'shared' => (int) ((int) $s['user_id'] !== (int) $u['id'])], $list)];
 }
 
 function api_templates_list(array $in): array
@@ -210,12 +249,13 @@ function api_session_update(array $in): array
     $s = own_session($in['id'] ?? 0);
     $bool = fn($k) => isset($in[$k]) ? (int) !empty($in[$k]) : (int) $s[$k];
     q(
-        'UPDATE sessions SET title = ?, mode = ?, ask_names = ?, premoderation = ?, filter_on = ?, reactions_on = ?, theme = ? WHERE id = ?',
+        'UPDATE sessions SET title = ?, mode = ?, ask_names = ?, premoderation = ?, filter_on = ?, reactions_on = ?, theme = ?, teams = ? WHERE id = ?',
         [
             isset($in['title']) ? str_clean($in['title'], 120) : $s['title'],
             isset($in['mode']) ? ($in['mode'] === 'self' ? 'self' : 'live') : $s['mode'],
             $bool('ask_names'), $bool('premoderation'), $bool('filter_on'), $bool('reactions_on'),
             isset($in['theme']) ? json_encode(clean_theme($in['theme'])) : $s['theme'],
+            isset($in['teams']) ? json_encode(array_slice(array_values(array_filter(array_map(fn($t) => str_clean($t, 30), (array) $in['teams']), fn($t) => $t !== '')), 0, 8), JSON_UNESCAPED_UNICODE) : $s['teams'],
             $s['id'],
         ]
     );
@@ -225,7 +265,7 @@ function api_session_update(array $in): array
 
 function api_session_delete(array $in): array
 {
-    $s = own_session($in['id'] ?? 0);
+    $s = own_session($in['id'] ?? 0, true);
     q('DELETE FROM sessions WHERE id = ?', [$s['id']]);
     q('DELETE FROM answers WHERE session_id = ?', [$s['id']]);
     remove_state($s['code']);
@@ -260,7 +300,7 @@ function api_session_reset(array $in): array
     q('DELETE FROM participants WHERE session_id = ?', [$s['id']]);
     q('DELETE FROM reactions WHERE session_id = ?', [$s['id']]);
     q('UPDATE questions SET opened_at = 0 WHERE session_id = ?', [$s['id']]);
-    q("UPDATE sessions SET phase = 'lobby', current_question_id = NULL, hide_results = 0, spotlight_answer_id = NULL, archived = 0 WHERE id = ?", [$s['id']]);
+    q("UPDATE sessions SET phase = 'lobby', current_question_id = NULL, hide_results = 0, spotlight_answer_id = NULL, raffle = '', archived = 0 WHERE id = ?", [$s['id']]);
     remove_state($s['code']);
     write_state((int) $s['id']);
     return ['ok' => true];

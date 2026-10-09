@@ -26,6 +26,7 @@
       h('div', { class: 'stat' }, h('b', { text: r.answers }), h('span', { text: plural(r.answers, 'ответ', 'ответа', 'ответов') })),
       h('div', { class: 'stat' }, h('b', { text: r.slides.length }), h('span', { text: plural(r.slides.length, 'слайд', 'слайда', 'слайдов') }))));
 
+  if (r.teams && r.teams.length) body.append(h('section', { class: 'report-slide' }, h('h2', { text: 'Командный зачёт' }), h('div', { class: 'viz' }, Viz.teams(r.teams))));
   if (r.leaders.length) {
     const box = h('div', { class: 'viz' }, Viz.leaders(r.leaders));
     body.append(h('section', { class: 'report-slide' }, h('h2', { text: 'Таблица лидеров' }), box));
@@ -36,7 +37,8 @@
     const viz = h('div', { class: 'viz', 'data-cap': 500 });
     const section = h('section', { class: 'report-slide' },
       h('div', { class: 'row' }, h('span', { class: 'tag', text: (i + 1) + '. ' + TYPE_NAMES[s.q.type] }),
-        s.q.type !== 'info' ? h('span', { class: 'hint', text: 'Ответили: ' + s.data.answered }) : ''),
+        s.q.type !== 'info' ? h('span', { class: 'hint grow', text: 'Ответили: ' + s.data.answered }) : '',
+        Poster.SUPPORTED.includes(s.q.type) ? h('button', { class: 'btn small ghost no-print', type: 'button', text: 'Сохранить картинкой', onclick: () => Poster.save(s.q, s.data, r.session.title) }) : ''),
       h('h2', { text: s.q.text || 'Без текста', style: { marginTop: '10px' } }), viz);
     body.append(section);
     // Облаку слов нужны размеры блока, поэтому рисуем после вставки в страницу.

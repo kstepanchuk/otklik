@@ -157,6 +157,17 @@ function migrations(): array
         );
         ",
         2 => "ALTER TABLE sessions ADD COLUMN hide_join INTEGER NOT NULL DEFAULT 0;",
+        3 => "
+        ALTER TABLE answers ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE sessions ADD COLUMN raffle TEXT NOT NULL DEFAULT '';
+        ALTER TABLE sessions ADD COLUMN teams TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE participants ADD COLUMN team INTEGER;
+        CREATE TABLE session_members (
+            session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            PRIMARY KEY (session_id, user_id)
+        );
+        ",
     ];
 }
 

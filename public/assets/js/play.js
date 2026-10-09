@@ -14,6 +14,8 @@
   me.name = saved.name || '';
   const persist = () => { try { localStorage.setItem(storeKey, JSON.stringify({ token: me.token, name: me.name })); } catch (e) { /* приватный режим */ } };
 
+  // Общая лента на телефоне: вопросы спикеру и открытые ответы, где включены лайки.
+  const feedOn = (q) => q.type === 'qa' || (q.type === 'open' && !!q.s.likes);
   const maxAnswers = (q) => (q.type === 'open' ? Math.max(1, Math.min(10, q.s.max_answers || 3)) : q.type === 'cloud' ? 3 : q.type === 'qa' ? 10 : 1);
   const mine = (q) => me.answers[q.id] || [];
   const now = () => Date.now() + offset;
@@ -33,15 +35,38 @@
     return res.json();
   }
 
-  async function join(name) {
-    const r = await apiPost('join', { code, token: me.token, name: name || me.name });
+  async function join(name, team) {
+    const r = await apiPost('join', { code, token: me.token, name: name || me.name, team });
     me.token = r.token;
     me.name = r.name;
     me.answers = r.answers || {};
     me.likes = new Set(r.likes || []);
+    me.pid = r.pid;
+    me.team = r.team;
     offset = r.now - Date.now();
     joined = true;
     persist();
+  }
+
+  function askTeam() {
+    show(false, h('div', { class: 'play-q', text: 'Выберите команду' }), h('p', { class: 'hint', text: 'Сменить команду потом нельзя.' }),
+      h('div', { class: 'opts' }, st.teams.map((name, i) => h('button', { class: 'opt', type: 'button', text: name, onclick: async () => {
+        try { await join('', i); viewKey = ''; render(); } catch (e) { oops(e); }
+      } }))));
+  }
+
+  // Розыгрыш: телефон победителя узнаёт себя по номеру участника.
+  let winSeen = 0;
+  function showWin() {
+    const r = st.raffle;
+    const old = $('.win-banner');
+    if (!r || r.pid !== me.pid) { if (old) old.remove(); return; }
+    if (old || winSeen === r.at) return;
+    winSeen = r.at;
+    const box = h('div', { class: 'win-banner', role: 'alert' }, h('b', { text: 'Вы выиграли розыгрыш!' }), h('span', { text: 'Поднимите руку, чтобы ведущий вас увидел.' }),
+      h('button', { class: 'btn small', type: 'button', text: 'Понятно', onclick: () => box.remove() }));
+    root.append(box);
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
   }
 
   function askName() {
@@ -222,11 +247,12 @@
   }
   function drawQa(box) {
     if (!box || !qa) return;
-    const items = qa.items.slice().sort((a, b) => a.answered - b.answered || b.likes - a.likes || a.id - b.id);
-    box.replaceChildren(items.length ? h('p', { class: 'hint', text: 'Поддержите вопросы, на которые хотите услышать ответ' }) : '', ...items.map((it) => {
+    const items = qa.items.slice().sort((a, b) => a.answered - b.answered || (b.pinned || 0) - (a.pinned || 0) || b.likes - a.likes || a.id - b.id);
+    const isQa = st.q && st.q.type === 'qa';
+    box.replaceChildren(items.length ? h('p', { class: 'hint', text: isQa ? 'Поддержите вопросы, на которые хотите услышать ответ' : 'Отметьте ответы, с которыми согласны' }) : '', ...items.map((it) => {
       const on = me.likes.has(it.id);
       return h('div', { class: 'q' + (it.answered ? ' done' : '') }, h('span', { text: it.text }),
-        h('button', { class: 'like' + (on ? ' on' : ''), type: 'button', 'aria-pressed': on ? 'true' : 'false', 'aria-label': 'Поддержать вопрос', text: '▲ ' + it.likes, onclick: async () => {
+        h('button', { class: 'like' + (on ? ' on' : ''), type: 'button', 'aria-pressed': on ? 'true' : 'false', 'aria-label': 'Поддержать', text: '▲ ' + it.likes, onclick: async () => {
           try {
             const r = await apiPost('vote', { code, token: me.token, answer_id: it.id });
             if (r.liked) { me.likes.add(it.id); it.likes++; } else { me.likes.delete(it.id); it.likes--; }
@@ -237,7 +263,7 @@
   }
   async function pollQa() {
     const q = st && st.mode === 'live' ? st.q : null;
-    if (!q || q.type !== 'qa' || !joined) return;
+    if (!q || !feedOn(q) || !joined) return;
     try {
       const res = await fetch('state/' + code + '-qa.json', { cache: 'no-cache' });
       if (!res.ok) return;
@@ -292,8 +318,8 @@
     const done = mine(q).length >= maxAnswers(q);
     const late = q.time_limit && now() > q.opened_at + q.time_limit * 1000;
     if (phase === 'reveal' && (q.type === 'quiz' || q.type === 'number')) return show(true, head, quizResult(q));
-    if (phase === 'open' && !done && !late) return show(false, head, timeBar(q), form(q), q.type === 'qa' ? qaList() : null);
-    if (q.type === 'qa') return show(false, head, h('p', { class: 'hint', text: phase === 'open' ? 'Вы задали максимум вопросов. Можно поддержать чужие.' : 'Приём вопросов закрыт.' }), qaList());
+    if (phase === 'open' && !done && !late) return show(false, head, timeBar(q), form(q), feedOn(q) ? qaList() : null);
+    if (feedOn(q)) return show(false, head, h('p', { class: 'hint', text: q.type === 'qa' ? (phase === 'open' ? 'Вы задали максимум вопросов. Можно поддержать чужие.' : 'Приём вопросов закрыт.') : (phase === 'open' ? 'Ваши ответы приняты. Можно поддержать чужие.' : 'Приём ответов закрыт.') }), qaList());
     if (done) return show(true, head, state('✓', 'Ответ принят', phase === 'open' ? 'Смотрите на экран — результаты появляются там.' : 'Результаты на экране.', 'ok'));
     return show(true, head, state('', late && phase === 'open' ? 'Время вышло' : 'Приём ответов закрыт', 'Ждём следующий вопрос.'));
   }
@@ -328,6 +354,12 @@
     $('#who').textContent = me.name || '';
     document.title = st.title || 'Отклик';
     if (!joined) return;
+    // Командный режим: команда выбирается один раз, до первого ответа.
+    if ((st.teams || []).length && (me.team === null || me.team === undefined)) {
+      if (viewKey !== 'team') { viewKey = 'team'; askTeam(); }
+      return;
+    }
+    showWin();
     const self = st.mode === 'self';
     const q = self ? (st.questions || [])[selfIdx] : st.q;
     const key = [st.mode, self ? selfIdx : st.phase, q ? q.id : 0, q ? mine(q).length : 0, q ? q.opened_at : 0].join(':');

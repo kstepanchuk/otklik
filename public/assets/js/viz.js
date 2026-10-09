@@ -63,7 +63,7 @@ const Viz = (() => {
       r.row.classList.toggle('ok', !!(d.correct && o.reveal && d.correct.includes(i)));
     });
     st.bars.classList.toggle('revealed', !!(d.correct && o.reveal));
-    if (d.leaders) st.side.replaceChildren(leaders(d.leaders));
+    if (d.leaders) st.side.replaceChildren(d.teams && d.teams.length ? teams(d.teams) : leaders(d.leaders));
     if (d.segments) {
       const head = h('tr', {}, h('th', { text: d.segment_title || '' }), q.options.map((x, i) => h('th', { text: x.text || 'Вариант ' + (i + 1) })));
       const body = d.segments.filter((s) => s.n).map((s) => h('tr', {},
@@ -76,35 +76,61 @@ const Viz = (() => {
     }
   }
 
+  function teams(list) {
+    return h('div', { class: 'leaders' }, list.map((t, i) => h('div', {}, h('i', { text: i + 1 }),
+      h('span', {}, t.name, h('small', { text: '  ' + t.n + ' ' + plural(t.n, 'участник', 'участника', 'участников'), style: { opacity: .7 } })), h('b', { text: t.score }))));
+  }
+
   function leaders(list) {
     if (!list || !list.length) return h('div', { class: 'viz-empty', text: 'Пока никто не набрал очков' });
     return h('div', { class: 'leaders' }, list.map((l, i) => h('div', {}, h('i', { text: i + 1 }), h('span', { text: l.name }), h('b', { text: l.score }))));
   }
 
   // ----- Открытые ответы -----
+  /** Одинаковые ответы складываются в одну карточку со счётчиком. */
+  function mergeSame(items) {
+    const groups = new Map();
+    for (const it of items) {
+      const key = it.text.trim().toLowerCase().replace(/[.!?…\s]+$/u, '');
+      const g = groups.get(key);
+      if (g) { g.n++; g.likes += it.likes; g.pinned = g.pinned || it.pinned; g.last = Math.max(g.last, it.id); g.name = ''; }
+      else groups.set(key, { id: it.id, text: it.text, name: it.name, n: 1, likes: it.likes, pinned: it.pinned, last: it.id });
+    }
+    return [...groups.values()];
+  }
+
+  function cardList(q, d) {
+    const byLikes = !!(q.s && q.s.likes);
+    return mergeSame(d.items.filter((x) => x.status === 'visible'))
+      .sort((a, b) => b.pinned - a.pinned || (byLikes ? b.likes - a.likes : 0) || b.last - a.last);
+  }
+
   function cards(el, q, d) {
     const st = setup(el, 'cards' + q.id, (st) => {
-      st.seen = new Map();
+      st.nodes = new Map();
       st.box = h('div', { class: 'cards' });
       el.append(st.box);
     });
-    const items = d.items.filter((x) => x.status === 'visible');
-    if (!items.length) return empty(el, 'Ответы появятся здесь');
-    const ids = new Set(items.map((x) => x.id));
-    for (const [id, node] of st.seen) if (!ids.has(id)) { node.remove(); st.seen.delete(id); }
-    for (const it of items) {
-      if (st.seen.has(it.id)) continue;
-      const node = h('div', { class: 'card-a' }, it.text, it.name ? h('small', { text: it.name }) : null);
-      st.seen.set(it.id, node);
-      st.box.prepend(node);
-    }
-    // На экране держим последние ответы, которые помещаются; старые уходят.
-    const cap = el.dataset.cap ? +el.dataset.cap : 40;
-    while (st.box.children.length > cap) {
-      const last = st.box.lastElementChild;
-      for (const [id, node] of st.seen) if (node === last) st.seen.delete(id);
-      last.remove();
-    }
+    // На экране держим ответы, которые помещаются: закреплённые, затем самые поддержанные или свежие.
+    const list = cardList(q, d).slice(0, el.dataset.cap ? +el.dataset.cap : 40);
+    if (!list.length) return empty(el, 'Ответы появятся здесь');
+    const keep = new Set(list.map((g) => g.id));
+    for (const [id, n] of st.nodes) if (!keep.has(id)) { n.root.remove(); st.nodes.delete(id); }
+    list.forEach((g, i) => {
+      let n = st.nodes.get(g.id);
+      if (!n) {
+        n = { text: h('span'), meta: h('small') };
+        n.root = h('div', { class: 'card-a' }, n.text, n.meta);
+        st.nodes.set(g.id, n);
+      }
+      n.text.textContent = g.text;
+      n.root.classList.toggle('pinned', !!g.pinned);
+      const meta = [g.pinned ? 'закреплён' : '', g.name, g.n > 1 ? '×' + g.n : '', g.likes ? '♥ ' + g.likes : ''].filter(Boolean).join('   ');
+      n.meta.textContent = meta;
+      n.meta.hidden = !meta;
+      // Узел переставляется только если его место изменилось, чтобы карточки не мигали.
+      if (st.box.children[i] !== n.root) st.box.insertBefore(n.root, st.box.children[i] || null);
+    });
   }
 
   function qa(el, q, d) {
@@ -257,5 +283,5 @@ const Viz = (() => {
     }
   }
 
-  return { render, leaders };
+  return { render, leaders, teams, cardList };
 })();

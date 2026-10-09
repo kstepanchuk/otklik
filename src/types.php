@@ -156,6 +156,39 @@ function validate_answer(array $q, $input, bool $timed): array
     return [];
 }
 
+/** У слайда есть общая лента на телефонах: вопросы спикеру и открытые ответы с лайками. */
+function has_feed(array $q): bool
+{
+    return $q['type'] === 'qa' || ($q['type'] === 'open' && !empty(q_settings($q)['likes']));
+}
+
+function session_teams(array $s): array
+{
+    $t = json_decode((string) ($s['teams'] ?? '[]'), true);
+    return is_array($t) ? array_values(array_filter(array_map('strval', $t), fn($x) => $x !== '')) : [];
+}
+
+/** Командный зачёт: средний счёт участников команды. */
+function team_board(int $sessionId): array
+{
+    $teams = session_teams(row('SELECT teams FROM sessions WHERE id = ?', [$sessionId]) ?: []);
+    if (!$teams) {
+        return [];
+    }
+    $out = [];
+    foreach ($teams as $i => $name) {
+        $out[$i] = ['name' => $name, 'score' => 0, 'n' => 0];
+    }
+    foreach (rows('SELECT team, COUNT(*) n, AVG(score) s FROM participants WHERE session_id = ? AND team IS NOT NULL GROUP BY team', [$sessionId]) as $r) {
+        if (isset($out[(int) $r['team']])) {
+            $out[(int) $r['team']]['score'] = (int) round((float) $r['s']);
+            $out[(int) $r['team']]['n'] = (int) $r['n'];
+        }
+    }
+    usort($out, fn($a, $b) => $b['score'] <=> $a['score']);
+    return $out;
+}
+
 function leaderboard(int $sessionId, int $limit = 5): array
 {
     $out = [];
@@ -176,7 +209,7 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
     $n = count($opts);
     $type = $q['type'];
     $answers = rows(
-        'SELECT a.id, a.participant_id, a.value, a.status, a.is_correct, a.points, a.answered, a.created_at, p.name
+        'SELECT a.id, a.participant_id, a.value, a.status, a.is_correct, a.points, a.answered, a.pinned, a.created_at, p.name
          FROM answers a LEFT JOIN participants p ON p.id = a.participant_id
          WHERE a.question_id = ? ORDER BY a.id',
         [$q['id']]
@@ -192,7 +225,7 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
     $item = function (array $a, string $text) {
         return [
             'id' => (int) $a['id'], 'text' => $text, 'name' => (string) $a['name'],
-            'status' => $a['status'], 'answered' => (int) $a['answered'], 'likes' => 0,
+            'status' => $a['status'], 'answered' => (int) $a['answered'], 'likes' => 0, 'pinned' => (int) $a['pinned'],
         ];
     };
 
@@ -206,7 +239,7 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
                     $items[(int) $a['id']] = $item($a, (string) $a['value']);
                 }
             }
-            if ($type === 'qa' && $items) {
+            if (has_feed($q) && $items) {
                 foreach (rows('SELECT v.answer_id, COUNT(*) c FROM votes v JOIN answers a ON a.id = v.answer_id WHERE a.question_id = ? GROUP BY v.answer_id', [$q['id']]) as $v) {
                     if (isset($items[(int) $v['answer_id']])) {
                         $items[(int) $v['answer_id']]['likes'] = (int) $v['c'];
@@ -237,7 +270,9 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
                     usort($items, fn($a, $b) => [$a['answered'], -$a['likes'], $a['id']] <=> [$b['answered'], -$b['likes'], $b['id']]);
                     $items = array_slice($items, 0, $host ? 500 : 150);
                 } else {
-                    $items = array_slice($items, $host ? -500 : -150);
+                    $pinned = array_values(array_filter($items, fn($i) => $i['pinned']));
+                    $rest = array_values(array_filter($items, fn($i) => !$i['pinned']));
+                    $items = array_merge($pinned, array_slice($rest, $host ? -500 : -150));
                 }
                 $data['items'] = $items;
             }
@@ -260,6 +295,7 @@ function aggregate(array $q, bool $host, bool $reveal, bool $withExtras = true):
                 }
                 if ($reveal) {
                     $data['leaders'] = leaderboard((int) $q['session_id']);
+                    $data['teams'] = team_board((int) $q['session_id']);
                 }
             }
             break;

@@ -39,7 +39,8 @@
   function finished(r) {
     view = 'finished';
     main.replaceChildren(h('div', { class: 'finish' }, h('h1', { text: 'Спасибо!' }),
-      r.leaders && r.leaders.length ? Viz.leaders(r.leaders) : h('p', { class: 'info-body', text: 'Сессия завершена' })));
+      r.teams && r.teams.length ? Viz.teams(r.teams) : null,
+      r.leaders && r.leaders.length ? Viz.leaders(r.leaders) : (r.teams && r.teams.length ? null : h('p', { class: 'info-body', text: 'Сессия завершена' }))));
   }
 
   function question(r) {
@@ -89,6 +90,8 @@
       $('#keys').replaceChildren(list, toggle);
     }
 
+    raffle(r.raffle);
+
     let sp = $('.spotlight');
     if (r.spotlight) {
       if (!sp) root.append(sp = h('div', { class: 'spotlight' }));
@@ -103,6 +106,26 @@
       }
     }
     reactSeen = counts;
+  }
+
+  // Розыгрыш: три секунды мелькают имена, затем остаётся победитель. Висит, пока ведущий не уберёт.
+  let raffleAt = 0, raffleTimer = 0;
+  function raffle(rf) {
+    let box = $('.raffle');
+    if (!rf) { if (box) box.remove(); raffleAt = 0; clearInterval(raffleTimer); return; }
+    if (raffleAt === rf.at) return;
+    raffleAt = rf.at;
+    if (!box) root.append(box = h('div', { class: 'raffle' }));
+    const name = h('blockquote'), note = h('cite', { text: 'Выбираем из ' + rf.pool + '…' });
+    box.replaceChildren(h('div', {}, name, note));
+    clearInterval(raffleTimer);
+    const names = rf.names && rf.names.length ? rf.names : [rf.name];
+    // Экран мог открыться уже после розыгрыша — тогда победитель показывается сразу.
+    const fresh = Date.now() + offset - rf.at < 5000;
+    let n = 0;
+    const done = () => { clearInterval(raffleTimer); name.textContent = rf.name; name.classList.add('won'); note.textContent = 'Победитель розыгрыша'; };
+    if (!fresh || matchMedia('(prefers-reduced-motion: reduce)').matches) return done();
+    raffleTimer = setInterval(() => { name.textContent = names[n++ % names.length]; if (n > 28) done(); }, 110);
   }
 
   function fly(emoji) {

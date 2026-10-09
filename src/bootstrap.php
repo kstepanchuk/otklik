@@ -27,6 +27,29 @@ require __DIR__ . '/types.php';
 require __DIR__ . '/state.php';
 require __DIR__ . '/templates.php';
 
+/** Журнал ошибок сервера: читается в админке, хранит последние записи. */
+function log_error(string $message): void
+{
+    $dir = ROOT . '/storage/logs';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    $file = $dir . '/error.log';
+    if (is_file($file) && filesize($file) > 512 * 1024) {
+        @rename($file, $file . '.1');
+    }
+    $where = ($_SERVER['REQUEST_METHOD'] ?? 'cli') . ' ' . preg_replace('/[^a-z_]/', '', (string) ($_GET['a'] ?? ''));
+    @file_put_contents($file, date('Y-m-d H:i:s') . "\t" . $where . "\t" . str_replace(["\r", "\n", "\t"], ' ', $message) . "\n", FILE_APPEND | LOCK_EX);
+}
+
+// Фатальные ошибки (нехватка памяти, ошибка в коде) до обработчика исключений не доходят — ловим их здесь.
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        log_error($e['message'] . ' @ ' . basename($e['file']) . ':' . $e['line']);
+    }
+});
+
 class ApiError extends Exception
 {
 }

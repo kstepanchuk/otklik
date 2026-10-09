@@ -9,10 +9,10 @@ function open_question(array $s, array $qq): void
 {
     q('UPDATE questions SET opened_at = ? WHERE id = ?', [now_ms(), $qq['id']]);
     q(
-        "UPDATE sessions SET current_question_id = ?, phase = 'open', hide_results = ?, spotlight_answer_id = NULL WHERE id = ?",
+        "UPDATE sessions SET current_question_id = ?, phase = 'open', hide_results = ?, spotlight_answer_id = NULL, raffle = '' WHERE id = ?",
         [$qq['id'], !empty(q_settings($qq)['hide_results']) ? 1 : 0, $s['id']]
     );
-    if ($qq['type'] === 'qa') {
+    if (has_feed($qq)) {
         write_qa_state($qq, $s['code']);
     }
 }
@@ -90,8 +90,36 @@ function api_toggle(array $in): array
         }
         q('UPDATE sessions SET spotlight_answer_id = ? WHERE id = ?', [$aid ?: null, $s['id']]);
     }
+    if (!empty($in['raffle_clear'])) {
+        q("UPDATE sessions SET raffle = '' WHERE id = ?", [$s['id']]);
+        write_state((int) $s['id']);
+        return ['ok' => true];
+    }
     q('UPDATE sessions SET version = version + 1 WHERE id = ?', [$s['id']]);
     return ['ok' => true];
+}
+
+/** Розыгрыш: случайный участник из тех, кто хотя бы раз ответил (или, если таких нет, из всех вошедших). */
+function api_raffle(array $in): array
+{
+    $s = own_session($in['session_id'] ?? 0);
+    $pool = rows('SELECT p.id, p.name FROM participants p WHERE p.session_id = ? AND EXISTS (SELECT 1 FROM answers a WHERE a.participant_id = p.id)', [$s['id']]);
+    if (!$pool) {
+        $pool = rows('SELECT id, name FROM participants WHERE session_id = ?', [$s['id']]);
+    }
+    if (!$pool) {
+        fail('В сессии пока нет участников');
+    }
+    $label = fn($p) => $p['name'] !== '' ? $p['name'] : 'Участник № ' . $p['id'];
+    $winner = $pool[random_int(0, count($pool) - 1)];
+    shuffle($pool);
+    $raffle = [
+        'pid' => (int) $winner['id'], 'name' => $label($winner), 'at' => now_ms(), 'pool' => count($pool),
+        'names' => array_map($label, array_slice($pool, 0, 24)),
+    ];
+    q('UPDATE sessions SET raffle = ? WHERE id = ?', [json_encode($raffle, JSON_UNESCAPED_UNICODE), $s['id']]);
+    write_state((int) $s['id']);
+    return ['ok' => true, 'name' => $raffle['name']];
 }
 
 function api_moderate(array $in): array
@@ -111,9 +139,11 @@ function api_moderate(array $in): array
         }
     } elseif (isset($in['answered'])) {
         q('UPDATE answers SET answered = ? WHERE id = ?', [(int) !empty($in['answered']), $a['id']]);
+    } elseif (isset($in['pinned'])) {
+        q('UPDATE answers SET pinned = ? WHERE id = ?', [(int) !empty($in['pinned']), $a['id']]);
     }
     $qq = row('SELECT * FROM questions WHERE id = ?', [$a['question_id']]);
-    if ($qq && $qq['type'] === 'qa') {
+    if ($qq && has_feed($qq)) {
         write_qa_state($qq, $s['code']);
     }
     q('UPDATE sessions SET version = version + 1 WHERE id = ?', [$s['id']]);
@@ -129,7 +159,8 @@ function api_results(array $in): array
         fail('Сессия с таким кодом не найдена', 404);
     }
     $u = current_user();
-    $owner = $u && ((int) $u['id'] === (int) $s['user_id'] || $u['role'] === 'admin');
+    $owner = $u && ((int) $u['id'] === (int) $s['user_id'] || $u['role'] === 'admin'
+        || (bool) val('SELECT 1 FROM session_members WHERE session_id = ? AND user_id = ?', [$s['id'], $u['id']]));
     $host = $owner && !empty($in['host']);
 
     $qid = (int) $s['current_question_id'];
@@ -165,6 +196,7 @@ function api_results(array $in): array
         'q' => null,
         'data' => null,
         'spotlight' => null,
+        'raffle' => json_decode((string) $s['raffle'], true) ?: null,
         'reactions' => new stdClass(),
     ];
     $all = session_questions((int) $s['id']);
@@ -182,12 +214,13 @@ function api_results(array $in): array
         $out['q'] = public_question($qq, $reveal || $host);
         $out['data'] = aggregate($qq, $host, $reveal);
         // Скрытые результаты не отдаются никому, кроме владельца: остаётся только число ответивших.
-        if ($s['hide_results'] && $s['phase'] === 'open' && !$owner && !in_array($qq['type'], ['info', 'qa'], true)) {
+        if ($s['hide_results'] && $s['phase'] === 'open' && !$owner && $qq['type'] !== 'info' && !has_feed($qq)) {
             $out['data'] = ['answered' => $out['data']['answered']];
         }
     }
     if ($s['phase'] === 'finished') {
         $out['leaders'] = leaderboard((int) $s['id'], 10);
+        $out['teams'] = team_board((int) $s['id']);
     }
     if ($s['spotlight_answer_id']) {
         $a = row("SELECT a.id, a.value, p.name FROM answers a LEFT JOIN participants p ON p.id = a.participant_id WHERE a.id = ? AND a.status = 'visible'", [$s['spotlight_answer_id']]);
@@ -219,6 +252,7 @@ function api_report(array $in): array
         'joined' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ?', [$s['id']]),
         'answers' => (int) val('SELECT COUNT(*) FROM answers WHERE session_id = ?', [$s['id']]),
         'leaders' => leaderboard((int) $s['id'], 10),
+        'teams' => team_board((int) $s['id']),
     ];
 }
 
@@ -304,7 +338,13 @@ function api_join(array $in): array
         q('INSERT INTO login_attempts (ip, at) VALUES (?, ?)', [$key, time()]);
         $token = bin2hex(random_bytes(16));
         q('INSERT INTO participants (session_id, token, name, last_seen, created_at) VALUES (?, ?, ?, ?, ?)', [$s['id'], $token, $name, time(), time()]);
-        $p = ['id' => last_id(), 'name' => $name, 'score' => 0];
+        $p = ['id' => last_id(), 'name' => $name, 'score' => 0, 'team' => null];
+    }
+    $teams = session_teams($s);
+    if (isset($in['team']) && is_numeric($in['team']) && isset($teams[(int) $in['team']]) && ($p['team'] ?? null) === null) {
+        // Команда выбирается один раз: иначе после вопроса можно было бы перейти к лидерам.
+        q('UPDATE participants SET team = ? WHERE id = ?', [(int) $in['team'], $p['id']]);
+        $p['team'] = (int) $in['team'];
     }
     $mine = [];
     foreach (rows('SELECT question_id, value, is_correct, points FROM answers WHERE participant_id = ? ORDER BY id', [$p['id']]) as $a) {
@@ -318,6 +358,8 @@ function api_join(array $in): array
         'now' => now_ms(),
         'answers' => (object) $mine,
         'likes' => $likes,
+        'pid' => (int) $p['id'],
+        'team' => isset($p['team']) && $p['team'] !== null ? (int) $p['team'] : null,
     ];
 }
 
@@ -376,7 +418,7 @@ function api_answer(array $in): array
     $id = last_id();
     q('UPDATE participants SET score = score + ?, last_seen = ? WHERE id = ?', [$points, time(), $p['id']]);
     db()->exec('COMMIT');
-    if ($qq['type'] === 'qa' && $status === 'visible') {
+    if (has_feed($qq) && $status === 'visible') {
         write_qa_state($qq, $s['code']);
     }
     $out = ['ok' => true, 'id' => $id, 'left' => $max - $given - 1, 'status' => $status === 'pending' ? 'pending' : 'ok'];
@@ -399,9 +441,12 @@ function api_vote(array $in): array
     $p = participant($s, $in['token'] ?? null);
     $a = row(
         "SELECT a.id, a.question_id FROM answers a JOIN questions q ON q.id = a.question_id
-         WHERE a.id = ? AND a.session_id = ? AND a.status = 'visible' AND q.type = 'qa'",
+         WHERE a.id = ? AND a.session_id = ? AND a.status = 'visible' AND q.type IN ('qa', 'open')",
         [(int) ($in['answer_id'] ?? 0), $s['id']]
     );
+    if ($a && !has_feed(row('SELECT * FROM questions WHERE id = ?', [$a['question_id']]))) {
+        $a = null;
+    }
     if (!$a) {
         fail('Вопрос не найден', 404);
     }

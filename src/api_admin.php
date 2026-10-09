@@ -133,6 +133,27 @@ function api_admin_settings_save(array $in): array
     return ['ok' => true];
 }
 
+function api_admin_errors(array $in): array
+{
+    require_admin();
+    $file = ROOT . '/storage/logs/error.log';
+    $lines = is_file($file) ? (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: []) : [];
+    $out = [];
+    foreach (array_reverse(array_slice($lines, -200)) as $line) {
+        $p = explode("\t", $line, 3);
+        $out[] = ['at' => $p[0] ?? '', 'where' => $p[1] ?? '', 'text' => $p[2] ?? ''];
+    }
+    return ['errors' => $out, 'total' => count($lines)];
+}
+
+function api_admin_errors_clear(array $in): array
+{
+    require_admin();
+    @unlink(ROOT . '/storage/logs/error.log');
+    @unlink(ROOT . '/storage/logs/error.log.1');
+    return ['ok' => true];
+}
+
 function api_admin_invite(array $in): array
 {
     require_admin();

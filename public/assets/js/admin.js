@@ -100,7 +100,18 @@
     h('button', { class: 'btn', type: 'submit', style: { justifySelf: 'start' }, text: 'Сохранить настройки' })));
   }
 
-  const views = { stats: ['Статистика', stats], users: ['Пользователи', users], sessions: ['Сессии', sessions], settings: ['Настройки', settings] };
+  async function errors() {
+    const r = await apiGet('admin_errors');
+    box.replaceChildren(
+      h('div', { class: 'row', style: { marginBottom: '14px' } },
+        h('span', { class: 'hint grow', text: r.total ? 'Записей в журнале: ' + r.total + '. Показаны последние ' + r.errors.length + ', новые сверху.' : '' }),
+        r.total ? h('button', { class: 'btn small danger', text: 'Очистить журнал', onclick: () => confirmBox('Очистить журнал ошибок?', 'Записи удалятся без возможности восстановления.', 'Очистить', async () => { await apiPost('admin_errors_clear'); errors(); }, true) }) : null),
+      r.errors.length
+        ? table(['Когда', 'Действие', 'Ошибка'], r.errors.map((e) => h('tr', {}, h('td', { text: e.at, style: { whiteSpace: 'nowrap' } }), h('td', { text: e.where, style: { whiteSpace: 'nowrap' } }), h('td', { text: e.text, style: { overflowWrap: 'anywhere' } }))))
+        : h('div', { class: 'empty' }, h('h2', { text: 'Ошибок не было' }), h('p', { text: 'Сюда попадают сбои сервера: если участник или спикер увидел «Ошибка сервера», причина будет здесь.' })));
+  }
+
+  const views = { stats: ['Статистика', stats], users: ['Пользователи', users], sessions: ['Сессии', sessions], settings: ['Настройки', settings], errors: ['Ошибки', errors] };
   function open(key) {
     tab = key;
     tabs.replaceChildren(...Object.entries(views).map(([k, [name]]) => h('button', { class: k === tab ? 'on' : '', role: 'tab', 'aria-selected': k === tab ? 'true' : 'false', text: name, onclick: () => open(k) })));

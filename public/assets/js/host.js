@@ -23,6 +23,7 @@
   const controls = h('div', { class: 'controls' });
   const counters = h('div', { class: 'row' });
   const feed = h('div', { class: 'feed' });
+  const upNext = h('p', { class: 'hint' });
   const feedTitle = h('h3', { text: 'Ответы' });
   stage.append(qText, viz);
 
@@ -44,7 +45,7 @@
   function drawControls(r) {
     const btn = (label, fn, cls) => h('button', { class: 'btn ' + (cls || ''), type: 'button', text: label, onclick: fn });
     const q = r.q, parts = [];
-    if (!changed('controls', [r.phase, q && q.id, q && q.type, r.hide_results, r.hide_join, r.index, r.total])) return;
+    if (!changed('controls', [r.phase, q && q.id, q && q.type, r.hide_results, r.hide_join, r.index, r.total, r.raffle && r.raffle.at, r.joined > 0])) return;
     if (self) {
       parts.push(h('span', { class: 'hint', text: 'Участники проходят слайды сами. Выберите слайд слева, чтобы посмотреть ответы.' }));
     } else if (r.phase === 'lobby') {
@@ -60,10 +61,20 @@
         if (r.phase === 'open') parts.push(btn(r.hide_results ? 'Показать результаты залу' : 'Скрыть результаты от зала', () => act('toggle', { hide_results: r.hide_results ? 0 : 1 }), 'ghost'));
       }
       parts.push(btn(r.hide_join ? 'Показать код и QR на экране' : 'Скрыть код и QR на экране', () => act('toggle', { hide_join: r.hide_join ? 0 : 1 }), 'ghost'));
+      if (q.type !== 'info') parts.push(btn('Сохранить картинкой', () => Poster.save(last.q, last.data, session.title), 'ghost'));
       parts.push(h('div', { class: 'grow' }), btn('Назад', () => act('goto', { dir: 'prev' }), 'ghost'),
         btn(r.index === r.total ? 'Завершить сессию' : 'Следующий слайд', () => act('goto', { dir: 'next' })));
     }
+    // Розыгрыш доступен в любой момент, пока в сессии есть участники.
+    if (!self && r.joined > 0) {
+      parts.push(r.raffle
+        ? btn('Убрать победителя с экрана', () => act('toggle', { raffle_clear: 1 }), 'ghost')
+        : btn('Розыгрыш', async () => { try { const x = await apiPost('raffle', { session_id: id }); toast('Победитель: ' + x.name); poll(); } catch (e) { oops(e); } }, 'ghost'));
+    }
     controls.replaceChildren(...parts);
+    // Что будет на следующем слайде — чтобы ведущий не переключал вслепую.
+    const nextSlide = !self && r.slides && r.phase !== 'finished' ? r.slides[r.index] : null;
+    upNext.textContent = nextSlide ? 'Дальше: ' + (r.index + 1) + '. ' + TYPE_NAMES[nextSlide.type] + (nextSlide.text ? ' — ' + nextSlide.text : '') : (!self && r.index && r.index === r.total ? 'Это последний слайд' : '');
   }
 
   function drawFeed(r) {
@@ -79,10 +90,11 @@
     const b = (label, fn) => h('button', { type: 'button', text: label, onclick: fn });
     feed.replaceChildren(...sorted.slice(0, 150).map((it) => h('div', { class: 'feed-item ' + it.status },
       h('div', { text: it.text }),
-      h('div', { class: 'who', text: (it.name || 'Без имени') + (it.status === 'pending' ? ' — ждёт проверки' : it.status === 'hidden' ? ' — скрыт' : '') + (q.type === 'qa' ? ' — лайков: ' + it.likes : '') }),
+      h('div', { class: 'who', text: (it.pinned ? 'Закреплён — ' : '') + (it.name || 'Без имени') + (q.type === 'open' && it.likes ? ' — лайков: ' + it.likes : '') + (it.status === 'pending' ? ' — ждёт проверки' : it.status === 'hidden' ? ' — скрыт' : '') + (q.type === 'qa' ? ' — лайков: ' + it.likes : '') }),
       h('div', { class: 'acts' },
         it.status !== 'visible' ? b('Показать', () => moderate({ answer_id: it.id, status: 'visible' })) : b('Скрыть', () => moderate({ answer_id: it.id, status: 'hidden' })),
         it.status === 'visible' && q.type !== 'cloud' ? b(sp === it.id ? 'Убрать с экрана' : 'На весь экран', () => act('toggle', { spotlight: sp === it.id ? 0 : it.id })) : null,
+        q.type === 'open' && it.status === 'visible' ? b(it.pinned ? 'Открепить' : 'Закрепить', () => moderate({ answer_id: it.id, pinned: it.pinned ? 0 : 1 })) : null,
         q.type === 'qa' ? b(it.answered ? 'Вернуть в список' : 'Отвечено', () => moderate({ answer_id: it.id, answered: it.answered ? 0 : 1 })) : null,
         b('Удалить', () => moderate({ answer_id: it.id, delete: 1 }))))));
   }
@@ -133,13 +145,14 @@
       h('div', { class: 'row' }, h('h2', { text: session.title }), h('span', { class: 'tag warn code-digits', text: formatCode(code) })),
       h('div', { class: 'row' },
         h('a', { class: 'btn sun', href: screenUrl, target: '_blank', rel: 'noopener', text: 'Открыть большой экран' }),
+        h('a', { class: 'btn ghost', href: 'remote.html?id=' + id, target: '_blank', rel: 'noopener', text: 'Кликер' }),
         h('a', { class: 'btn ghost', href: 'editor.html?id=' + id, text: 'Слайды' }),
         h('a', { class: 'btn ghost', href: 'report.html?id=' + id, text: 'Отчёт' }),
         h('a', { class: 'btn ghost', href: 'api.php?a=export&id=' + id, text: 'Скачать CSV' }),
         h('button', { class: 'btn danger', type: 'button', text: 'Начать заново', onclick: () => confirmBox('Начать сессию заново?', 'Все ответы, участники и очки удалятся. Слайды и код сессии останутся.', 'Удалить ответы и начать заново', () => apiPost('session_reset', { id }).then(poll), true) }))),
     h('div', { class: 'host' },
       h('div', { class: 'stack' }, h('h3', { text: 'Слайды' }), slides),
-      h('div', { class: 'stack' }, counters, stage, controls,
+      h('div', { class: 'stack' }, counters, stage, controls, upNext,
         h('p', { class: 'hint' }, 'Слайды переключаются и стрелками ', h('span', { class: 'kbd', text: '←' }), ' ', h('span', { class: 'kbd', text: '→' }), '. На большом экране: ', h('span', { class: 'kbd', text: 'H' }), ' скрывает результаты, ', h('span', { class: 'kbd', text: 'Q' }), ' скрывает код и QR, ', h('span', { class: 'kbd', text: 'F' }), ' включает полный экран.')),
       h('div', { class: 'panel stack' }, feedTitle, feed))));
   poll();

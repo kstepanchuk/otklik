@@ -28,13 +28,13 @@
         more('Копия', async () => { try { await apiPost('session_duplicate', { id: s.id }); load(); } catch (e) { oops(e); } }),
         more(s.archived ? 'Вернуть из архива' : 'В архив', async () => { try { await apiPost('session_archive', { id: s.id, archived: s.archived ? 0 : 1 }); load(); } catch (e) { oops(e); } }));
     }
-    acts.push(more('Удалить', () => confirmBox('Удалить «' + s.title + '»?', 'Слайды и все ответы удалятся без возможности восстановления.', 'Удалить', async () => { await apiPost('session_delete', { id: s.id }); load(); }, true), 'danger'));
+    if (!s.shared) acts.push(more('Удалить', () => confirmBox('Удалить «' + s.title + '»?', 'Слайды и все ответы удалятся без возможности восстановления.', 'Удалить', async () => { await apiPost('session_delete', { id: s.id }); load(); }, true), 'danger'));
     return h('div', { class: 'session-item' },
       tab === 'templates' ? h('div', { class: 'code-chip', text: 'Шаблон' }) : h('div', { class: 'code-chip', text: formatCode(s.code) }),
       h('div', {}, h('h3', { text: s.title }), h('div', { class: 'meta' },
         s.slides + ' ' + plural(s.slides, 'слайд', 'слайда', 'слайдов'),
         tab !== 'templates' ? ', ' + s.people + ' ' + plural(s.people, 'участник', 'участника', 'участников') + ', ' + s.answers + ' ' + plural(s.answers, 'ответ', 'ответа', 'ответов') + ' ' : '',
-        tab !== 'templates' ? phaseTag(s) : '')),
+        tab !== 'templates' ? phaseTag(s) : '', s.shared ? h('span', { class: 'tag', style: { marginLeft: '6px' }, text: 'Общий доступ' }) : '')),
       h('div', { class: 'row' }, acts));
   }
 

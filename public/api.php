@@ -10,7 +10,7 @@ require ROOT . '/src/api_admin.php';
 // Действия участника и входа: без аккаунта и без CSRF-токена (cookie в них не участвует).
 const ANONYMOUS = ['whoami', 'register', 'login', 'verify', 'forgot', 'reset', 'join', 'ping', 'answer', 'vote', 'react', 'me', 'results'];
 // Действия, которые только читают: их можно вызывать через GET.
-const READ_ONLY = ['whoami', 'results', 'me', 'sessions_list', 'templates_list', 'session_get', 'report', 'export', 'admin_stats', 'admin_users', 'admin_sessions', 'admin_settings'];
+const READ_ONLY = ['whoami', 'results', 'me', 'sessions_list', 'templates_list', 'session_get', 'report', 'export', 'admin_stats', 'admin_users', 'admin_sessions', 'admin_settings', 'admin_errors', 'session_members'];
 
 $action = preg_replace('/[^a-z_]/', '', (string) ($_GET['a'] ?? ''));
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -67,7 +67,7 @@ try {
         db()->exec('ROLLBACK');
     } catch (Throwable $ignored) {
     }
-    error_log('otklik: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    log_error(get_class($e) . ': ' . $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine());
     http_response_code(500);
     out(['error' => 'Ошибка сервера. Повторите через минуту']);
 }

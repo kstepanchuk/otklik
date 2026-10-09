@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PUBLIC_SETTINGS = ['multi', 'max_choices', 'min', 'max', 'label_min', 'label_max', 'image', 'body', 'max_answers', 'unit', 'hide_results', 'with_images'];
+const PUBLIC_SETTINGS = ['multi', 'max_choices', 'min', 'max', 'label_min', 'label_max', 'image', 'body', 'max_answers', 'unit', 'hide_results', 'with_images', 'likes'];
 
 function session_questions(int $sessionId): array
 {
@@ -69,6 +69,8 @@ function write_state(int $sessionId): void
         'ask_names' => (int) $s['ask_names'],
         'reactions' => (int) $s['reactions_on'],
         'theme' => json_decode($s['theme'] ?: '{}', true) ?: new stdClass(),
+        'teams' => session_teams($s),
+        'raffle' => null,
         'total' => count($questions),
         'index' => 0,
         'q' => null,
@@ -82,6 +84,11 @@ function write_state(int $sessionId): void
             $state['has_quiz'] = 1;
         }
     }
+    $raffle = json_decode((string) $s['raffle'], true);
+    if (is_array($raffle) && !empty($raffle['pid'])) {
+        // Телефон победителя узнаёт себя по номеру участника; имён в файле нет.
+        $state['raffle'] = ['pid' => (int) $raffle['pid'], 'at' => (int) $raffle['at']];
+    }
     if ($s['mode'] === 'self') {
         $state['questions'] = array_map(fn($qq) => public_question($qq, false), $questions);
     }
@@ -93,7 +100,7 @@ function write_qa_state(array $question, string $code): void
 {
     $data = aggregate($question, false, false, false);
     $items = array_map(
-        fn($i) => ['id' => $i['id'], 'text' => $i['text'], 'likes' => $i['likes'], 'answered' => $i['answered']],
+        fn($i) => ['id' => $i['id'], 'text' => $i['text'], 'likes' => $i['likes'], 'answered' => $i['answered'], 'pinned' => $i['pinned']],
         $data['items'] ?? []
     );
     write_json_atomic(state_path($code, '-qa'), ['q' => (int) $question['id'], 'items' => $items]);
