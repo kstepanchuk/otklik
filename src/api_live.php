@@ -191,7 +191,7 @@ function api_results(array $in): array
         'hide_join' => (int) $s['hide_join'],
         'theme' => clean_theme(json_decode($s['theme'] ?: '{}', true)),
         'now' => now_ms(),
-        'online' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ? AND last_seen > ?', [$s['id'], time() - 75]),
+        'online' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ? AND last_seen > ?', [$s['id'], time() - 270]),
         'joined' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ?', [$s['id']]),
         'q' => null,
         'data' => null,

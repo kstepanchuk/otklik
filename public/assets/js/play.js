@@ -405,9 +405,20 @@
       render();
     }
     // Телефоны одного зала часто выходят в сеть с одного адреса, поэтому опрос редкий и только у открытой страницы.
-    setInterval(() => { if (!document.hidden) tick(); }, 3000);
-    setInterval(() => { if (!document.hidden) pollQa(); }, 4000);
-    setInterval(() => { if (joined && !document.hidden) apiPost('ping', { code, token: me.token }).then((r) => { offset = r.now - Date.now(); }).catch(() => {}); }, 30000);
+    // Хостинг блокирует адрес, с которого приходит много запросов, а весь зал сидит за одним адресом Wi-Fi.
+    // Поэтому телефон спрашивает сервер редко и тем реже, чем меньше ему нужно знать прямо сейчас.
+    const nextDelay = () => {
+      let base = 6000;                                     // ждём следующий слайд
+      const q = st && st.mode === 'live' ? st.q : null;
+      if (st && st.mode === 'self') base = 30000;          // в самостоятельном режиме слайды не переключаются
+      else if (q && st.phase === 'open' && q.type !== 'info' && !mine(q).length) base = 12000;  // участник ещё отвечает
+      else if (st && st.phase === 'finished') base = 30000;
+      return base * (0.8 + Math.random() * 0.4);           // разброс: телефоны не обращаются одновременно
+    };
+    const loop = () => setTimeout(async () => { if (!document.hidden) await tick(); loop(); }, nextDelay());
+    loop();
+    setInterval(() => { if (!document.hidden) pollQa(); }, 9000);
+    setInterval(() => { if (joined && !document.hidden) apiPost('ping', { code, token: me.token }).then((r) => { offset = r.now - Date.now(); }).catch(() => {}); }, 120000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   }
 

@@ -56,6 +56,6 @@
   app.append(h('main', { class: 'remote' }, status, slide, extra, h('div', { class: 'remote-buttons' }, prev, next),
     h('a', { class: 'hint', href: 'host.html?id=' + id, text: 'Открыть полный пульт' })));
   poll();
-  setInterval(() => { if (!document.hidden) poll(); }, 1500);
+  setInterval(() => { if (!document.hidden) poll(); }, 4000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 })();
