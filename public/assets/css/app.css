@@ -319,6 +319,16 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .viz-hidden b { font: 700 5em/1 var(--display); color: var(--accent); }
 .viz-hidden span { color: var(--dim); font-size: 1.2em; }
 
+.opt-wrap { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 1em; height: 100%; }
+.opt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8em; align-content: center; }
+.opt-grid.many { font-size: .82em; }
+.opt-tile { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .8em; align-items: center; background: var(--soft); border-radius: .8em; padding: .8em 1em; font-size: 1.35em; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.opt-tile:has(img) { grid-template-columns: auto auto minmax(0, 1fr); }
+.opt-tile i { width: 2em; height: 2em; border-radius: .5em; background: var(--c); color: #fff; display: grid; place-items: center; font: 700 1em var(--display); font-style: normal; }
+.opt-tile:nth-child(4n) i { color: #1b1642; }
+.opt-tile img { height: 3em; width: 4em; object-fit: cover; border-radius: .4em; }
+.opt-note { color: var(--dim); text-align: center; font-size: 1.05em; }
+.bar-row .lab .letter { color: var(--dim); font-weight: 700; }
 .bars { display: grid; gap: .7em; align-content: center; height: 100%; }
 .bar-row { display: grid; grid-template-columns: minmax(6em, 15em) 1fr 5.5em; gap: 1em; align-items: center; }
 .bar-row.with-img { grid-template-columns: 4em minmax(4em, 11em) 1fr 5.5em; }

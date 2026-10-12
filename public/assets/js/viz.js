@@ -25,11 +25,27 @@ const Viz = (() => {
     el.replaceChildren(h('div', { class: 'viz-empty', text }));
   }
 
-  function hidden(el, n) {
-    el._vizKey = null;
-    el.replaceChildren(h('div', { class: 'viz-hidden' },
-      h('b', { text: n }),
-      h('span', { text: plural(n, 'человек ответил', 'человека ответили', 'человек ответили') + '. Результаты откроются после закрытия приёма' })));
+  const LETTERS = 'АБВГДЕЖЗИК';
+
+  // Результаты скрыты: зал видит варианты ответа без голосов и число ответивших.
+  function hidden(el, n, q) {
+    const note = n + ' ' + plural(n, 'человек ответил', 'человека ответили', 'человек ответили') + '. Результаты откроются после закрытия приёма';
+    if (!q.options || !q.options.length) {
+      el._vizKey = null;
+      el.replaceChildren(h('div', { class: 'viz-hidden' }, h('b', { text: n }),
+        h('span', { text: plural(n, 'человек ответил', 'человека ответили', 'человек ответили') + '. Результаты откроются после закрытия приёма' })));
+      return;
+    }
+    const st = setup(el, 'hidden' + q.id, (st) => {
+      st.note = h('div', { class: 'opt-note' });
+      el.append(h('div', { class: 'opt-wrap' },
+        h('div', { class: 'opt-grid' + (q.options.length > 4 ? ' many' : '') }, q.options.map((opt, i) => h('div', { class: 'opt-tile' },
+          h('i', { style: { '--c': COLORS[i % COLORS.length] }, text: LETTERS[i] || i + 1 }),
+          opt.img ? h('img', { src: opt.img, alt: '' }) : null,
+          h('span', { text: opt.text || 'Вариант ' + (i + 1) })))),
+        st.note));
+    });
+    st.note.textContent = note;
   }
 
   // ----- Опрос и викторина -----
@@ -42,7 +58,7 @@ const Viz = (() => {
         const num = h('div', { class: 'num' });
         const row = h('div', { class: 'bar-row' + (withImg ? ' with-img' : '') },
           withImg ? (opt.img ? h('img', { src: opt.img, alt: '' }) : h('span')) : null,
-          h('div', { class: 'lab', text: opt.text || 'Вариант ' + (i + 1) }),
+          h('div', { class: 'lab' }, h('b', { class: 'letter', text: (LETTERS[i] || i + 1) + ') ' }), opt.text || 'Вариант ' + (i + 1)),
           h('div', { class: 'track' }, fill, ghost), num);
         return { row, fill, ghost, num };
       });
@@ -268,7 +284,7 @@ const Viz = (() => {
   /** o: { reveal, hidden } */
   function render(el, q, d, o = {}) {
     if (!q || !d) return empty(el, '');
-    if (o.hidden && !['info', 'qa'].includes(q.type)) return hidden(el, d.answered);
+    if (o.hidden && !['info', 'qa'].includes(q.type)) return hidden(el, d.answered, q);
     switch (q.type) {
       case 'poll': case 'quiz': return bars(el, q, d, o);
       case 'open': return cards(el, q, d);

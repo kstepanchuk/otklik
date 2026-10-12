@@ -143,7 +143,7 @@
 
   function quizForm(q) {
     let locked = false;
-    return h('div', { class: 'opts quiz' }, q.options.map((opt, i) => h('button', { class: 'opt', type: 'button', style: { '--c': COLORS[i % 4] }, text: opt.text || 'Вариант ' + (i + 1), onclick: async (e) => {
+    return h('div', { class: 'opts quiz' }, q.options.map((opt, i) => h('button', { class: 'opt', type: 'button', style: { '--c': COLORS[i % 4] }, text: ('АБВГДЕЖЗИК'[i] || i + 1) + ') ' + (opt.text || 'Вариант ' + (i + 1)), onclick: async (e) => {
       if (locked) return;
       locked = true;
       e.currentTarget.classList.add('on');
