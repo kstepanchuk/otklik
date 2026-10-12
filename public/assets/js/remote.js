@@ -28,8 +28,15 @@
     const phase = { lobby: 'Зал видит QR-код', open: 'Приём ответов открыт', closed: 'Приём закрыт', reveal: 'Ответ показан', finished: 'Сессия завершена' }[r.phase];
     status.replaceChildren(h('b', { text: r.index ? r.index + ' из ' + r.total : session.title }), h('span', { text: phase + (r.data ? ' — ответили ' + r.data.answered + ' из ' + r.joined : r.joined ? ' — вошло ' + r.joined : '') }));
     const coming = r.slides && r.phase !== 'finished' ? r.slides[r.index] : null;
-    slide.replaceChildren(h('div', { class: 'now', text: r.q ? (r.q.text || TYPE_NAMES[r.q.type]) : phase }),
-      coming ? h('div', { class: 'hint', text: 'Дальше: ' + TYPE_NAMES[coming.type] + (coming.text ? ' — ' + coming.text : '') }) : null);
+    // Варианты ответа видны только ведущему: верный отмечен, рядом число голосов.
+    const options = r.q && r.q.options && r.q.options.length ? h('div', { class: 'remote-opts' }, r.q.options.map((opt, i) => {
+      const right = Array.isArray(r.q.correct) && r.q.correct.includes(i);
+      const votes = r.data && r.data.counts ? r.data.counts[i] || 0 : null;
+      return h('div', { class: right ? 'right' : '' }, h('i', { style: { '--c': COLORS[i % COLORS.length] }, text: 'АБВГДЕЖЗИК'[i] || i + 1 }),
+        h('span', { text: (opt.text || 'Вариант ' + (i + 1)) + (right ? ' — верный' : '') }), votes === null ? null : h('b', { text: votes }));
+    })) : null;
+    slide.replaceChildren(...[h('div', { class: 'now', text: r.q ? (r.q.text || TYPE_NAMES[r.q.type]) : phase }), options,
+      coming ? h('div', { class: 'hint', text: 'Дальше: ' + TYPE_NAMES[coming.type] + (coming.text ? ' — ' + coming.text : '') }) : null].filter(Boolean));
     const scored = r.q && ['quiz', 'number'].includes(r.q.type) && ['open', 'closed'].includes(r.phase);
     next.textContent = r.phase === 'lobby' ? 'Начать' : scored ? 'Показать ответ' : r.phase === 'finished' ? 'Сессия завершена' : r.index === r.total ? 'Завершить' : 'Дальше';
     next.disabled = r.phase === 'finished' || !r.total;
