@@ -404,8 +404,9 @@
       }
       render();
     }
-    setInterval(tick, 2000);
-    setInterval(pollQa, 3000);
+    // Телефоны одного зала часто выходят в сеть с одного адреса, поэтому опрос редкий и только у открытой страницы.
+    setInterval(() => { if (!document.hidden) tick(); }, 3000);
+    setInterval(() => { if (!document.hidden) pollQa(); }, 4000);
     setInterval(() => { if (joined && !document.hidden) apiPost('ping', { code, token: me.token }).then((r) => { offset = r.now - Date.now(); }).catch(() => {}); }, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   }

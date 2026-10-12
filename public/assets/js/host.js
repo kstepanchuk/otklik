@@ -156,5 +156,6 @@
         h('p', { class: 'hint' }, 'Слайды переключаются и стрелками ', h('span', { class: 'kbd', text: '←' }), ' ', h('span', { class: 'kbd', text: '→' }), '. На большом экране: ', h('span', { class: 'kbd', text: 'H' }), ' скрывает результаты, ', h('span', { class: 'kbd', text: 'Q' }), ' скрывает код и QR, ', h('span', { class: 'kbd', text: 'F' }), ' включает полный экран.')),
       h('div', { class: 'panel stack' }, feedTitle, feed))));
   poll();
-  setInterval(poll, 1000);
+  setInterval(() => { if (!document.hidden) poll(); }, 1500);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 })();

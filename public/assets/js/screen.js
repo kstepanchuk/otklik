@@ -206,6 +206,8 @@
   buildMini();
   apiGet('whoami').then((me) => { App.csrf = me.csrf; }).catch(() => {});
   poll();
-  setInterval(poll, 1000);
+  // Скрытая вкладка сервер не опрашивает: забытые окна не создают лишних запросов с адреса зала.
+  setInterval(() => { if (!document.hidden) poll(); }, 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   setInterval(tickTimer, 250);
 })();
