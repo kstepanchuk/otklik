@@ -300,10 +300,11 @@ function api_session_reset(array $in): array
     q('DELETE FROM participants WHERE session_id = ?', [$s['id']]);
     q('DELETE FROM reactions WHERE session_id = ?', [$s['id']]);
     q('UPDATE questions SET opened_at = 0 WHERE session_id = ?', [$s['id']]);
-    q("UPDATE sessions SET phase = 'lobby', current_question_id = NULL, hide_results = 0, spotlight_answer_id = NULL, raffle = '', archived = 0 WHERE id = ?", [$s['id']]);
+    q("UPDATE sessions SET phase = 'lobby', current_question_id = NULL, hide_results = 0, spotlight_answer_id = NULL, raffle = '', archived = 0, code = ? WHERE id = ?", [$code = new_code(), $s['id']]);
+    // Новый код: участники прошлого запуска по старому QR в сессию уже не попадут.
     remove_state($s['code']);
     write_state((int) $s['id']);
-    return ['ok' => true];
+    return ['ok' => true, 'code' => $code];
 }
 
 function api_question_save(array $in): array
