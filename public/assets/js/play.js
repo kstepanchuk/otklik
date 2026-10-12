@@ -408,12 +408,12 @@
     // Хостинг блокирует адрес, с которого приходит много запросов, а весь зал сидит за одним адресом Wi-Fi.
     // Поэтому телефон спрашивает сервер редко и тем реже, чем меньше ему нужно знать прямо сейчас.
     const nextDelay = () => {
-      let base = 6000;                                     // ждём следующий слайд
+      let base = 2000;                                     // ждём следующий слайд
       const q = st && st.mode === 'live' ? st.q : null;
       if (st && st.mode === 'self') base = 30000;          // в самостоятельном режиме слайды не переключаются
-      else if (q && st.phase === 'open' && q.type !== 'info' && !mine(q).length) base = 12000;  // участник ещё отвечает
+      else if (q && st.phase === 'open' && q.type !== 'info' && !mine(q).length) base = 4000;  // участник ещё отвечает
       else if (st && st.phase === 'finished') base = 30000;
-      return base * (0.8 + Math.random() * 0.4);           // разброс: телефоны не обращаются одновременно
+      return base * (0.9 + Math.random() * 0.2);           // разброс: телефоны не обращаются одновременно
     };
     const loop = () => setTimeout(async () => { if (!document.hidden) await tick(); loop(); }, nextDelay());
     loop();
