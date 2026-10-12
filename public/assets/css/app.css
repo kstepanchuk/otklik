@@ -398,11 +398,13 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 
 /* ---------- Телефон участника ---------- */
 
-.play { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; }
+.play { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; grid-template-columns: minmax(0, 1fr); overflow-x: hidden; }
 .play-top { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; font-size: 13px; color: var(--dim); gap: 10px; }
-.play-top .brand { font-size: 15px; color: var(--fg); min-width: 0; }
-.play-top .brand span, .play-top #brand { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.play-top .brand::before { flex: none; }
+/* Длинное название сессии обрезается многоточием и не раздвигает страницу шире экрана. */
+.play-top { min-width: 0; }
+.play-top .brand { font-size: 15px; color: var(--fg); display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.play-top .brand::before { display: inline-block; vertical-align: middle; margin: -2px 20px 0 0; }
+.play-top #who { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .play-main { padding: 8px 18px 28px; display: grid; align-content: start; gap: 18px; max-width: 560px; width: 100%; margin: 0 auto; }
 .play-main.center { align-content: center; text-align: center; justify-items: center; }
 .play-q { font: 700 clamp(22px, 6vw, 30px)/1.18 var(--display); text-wrap: balance; }
