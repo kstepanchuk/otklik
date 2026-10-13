@@ -189,6 +189,7 @@ function api_results(array $in): array
         'phase' => $s['phase'],
         'hide_results' => (int) $s['hide_results'],
         'hide_join' => (int) $s['hide_join'],
+        'reactions_on' => (int) $s['reactions_on'],
         'theme' => clean_theme(json_decode($s['theme'] ?: '{}', true)),
         'now' => now_ms(),
         'online' => (int) val('SELECT COUNT(*) FROM participants WHERE session_id = ? AND last_seen > ?', [$s['id'], time() - 270]),

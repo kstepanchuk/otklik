@@ -42,7 +42,8 @@
     next.disabled = r.phase === 'finished' || !r.total;
     prev.disabled = r.phase === 'lobby';
     const b = (label, fn) => h('button', { class: 'btn ghost', type: 'button', text: label, onclick: fn });
-    extra.replaceChildren(...(r.q && r.q.type !== 'info' && r.phase !== 'finished' ? [
+    const reactBtn = r.phase !== 'finished' ? [b(r.reactions_on ? 'Выключить реакции' : 'Включить реакции', async () => { try { await apiPost('session_update', { id, reactions_on: r.reactions_on ? 0 : 1 }); await poll(); } catch (e) { oops(e); } })] : [];
+    extra.replaceChildren(...reactBtn, ...(r.q && r.q.type !== 'info' && r.phase !== 'finished' ? [
       r.phase === 'open' ? b('Закрыть приём', () => act('phase', { phase: 'closed' })) : b('Открыть приём', () => act('phase', { phase: 'open' })),
       b(r.hide_results ? 'Показать результаты' : 'Скрыть результаты', () => act('toggle', { hide_results: r.hide_results ? 0 : 1 })),
     ] : []));

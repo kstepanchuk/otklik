@@ -45,7 +45,7 @@
   function drawControls(r) {
     const btn = (label, fn, cls) => h('button', { class: 'btn ' + (cls || ''), type: 'button', text: label, onclick: fn });
     const q = r.q, parts = [];
-    if (!changed('controls', [r.phase, q && q.id, q && q.type, r.hide_results, r.hide_join, r.index, r.total, r.raffle && r.raffle.at, r.joined > 0])) return;
+    if (!changed('controls', [r.phase, q && q.id, q && q.type, r.hide_results, r.hide_join, r.reactions_on, r.index, r.total, r.raffle && r.raffle.at, r.joined > 0])) return;
     if (self) {
       parts.push(h('span', { class: 'hint', text: 'Участники проходят слайды сами. Выберите слайд слева, чтобы посмотреть ответы.' }));
     } else if (r.phase === 'lobby') {
@@ -64,6 +64,12 @@
       if (q.type !== 'info') parts.push(btn('Сохранить картинкой', () => Poster.save(last.q, last.data, session.title), 'ghost'));
       parts.push(h('div', { class: 'grow' }), btn('Назад', () => act('goto', { dir: 'prev' }), 'ghost'),
         btn(r.index === r.total ? 'Завершить сессию' : 'Следующий слайд', () => act('goto', { dir: 'next' })));
+    }
+    // Реакции отключаются на лету: панель с эмодзи пропадает с телефонов, на экране они перестают летать.
+    if (!self && r.phase !== 'finished') {
+      parts.push(btn(r.reactions_on ? 'Выключить реакции' : 'Включить реакции', async () => {
+        try { await apiPost('session_update', { id, reactions_on: r.reactions_on ? 0 : 1 }); await poll(); } catch (e) { oops(e); }
+      }, 'ghost'));
     }
     // Розыгрыш доступен в любой момент, пока в сессии есть участники.
     if (!self && r.joined > 0) {
@@ -113,7 +119,8 @@
       r.q && r.q.time_limit && r.phase === 'open' && !self ? h('span', { class: 'tag warn', text: 'Осталось ' + Math.max(0, Math.ceil((r.q.opened_at + r.q.time_limit * 1000 - r.now) / 1000)) + ' с' }) : '',
       !self && r.phase !== 'lobby' && r.phase !== 'finished' ? h('span', { class: 'tag ' + (r.phase === 'open' ? 'live' : 'off'), text: { open: 'Приём открыт', closed: 'Приём закрыт', reveal: 'Ответ показан' }[r.phase] }) : '',
       r.hide_results ? h('span', { class: 'tag warn', text: 'Результаты скрыты от зала' }) : '',
-      r.hide_join ? h('span', { class: 'tag off', text: 'Код и QR скрыты' }) : '');
+      r.hide_join ? h('span', { class: 'tag off', text: 'Код и QR скрыты' }) : '',
+      r.reactions_on ? '' : h('span', { class: 'tag off', text: 'Реакции выключены' }));
     if (r.q) {
       qText.textContent = r.q.text;
       Viz.render(viz, r.q, r.data, { reveal: true });
