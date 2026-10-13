@@ -50,6 +50,8 @@
       main.replaceChildren(h('div', { class: 'q-text', id: 'qtext' }), h('div', { class: 'viz', id: 'viz' }));
     }
     $('#qtext').textContent = r.q.text;
+    $('#qtext').classList.toggle('long', r.q.text.length > 80 && r.q.text.length <= 150);
+    $('#qtext').classList.toggle('xlong', r.q.text.length > 150);
     const reveal = r.phase === 'reveal' || r.phase === 'finished';
     Viz.render($('#viz'), r.q, r.data, { reveal, hidden: !!r.hide_results && r.phase === 'open' });
   }

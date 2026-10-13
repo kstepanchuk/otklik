@@ -175,28 +175,40 @@ const Viz = (() => {
     const base = Math.max(14, Math.min(W, H * 1.6) / 22);
     const present = new Set(d.words.map((w) => w.w));
     for (const [w, node] of st.nodes) if (!present.has(w)) { node.remove(); st.nodes.delete(w); }
-    const placed = [];
     d.words.forEach((word, i) => {
-      let node = st.nodes.get(word.w);
-      if (!node) {
-        node = h('span', { text: word.w, style: { color: COLORS[i % 6], transform: `translate(${W / 2}px, ${H / 2}px)`, opacity: 0 } });
-        st.nodes.set(word.w, node);
-        st.box.append(node);
-      }
-      const size = base * (0.75 + 1.9 * Math.sqrt(word.n / maxN) * (d.words.length > 25 ? 0.8 : 1));
-      node.style.fontSize = size + 'px';
-      const w = node.offsetWidth + 14, hh = node.offsetHeight + 8;
-      let x = 0, y = 0, ok = false;
-      for (let t = 0; t < 900 && !ok; t += 0.35) {
-        x = W / 2 + 4.2 * t * Math.cos(t) * (W / H > 1.4 ? 1.7 : 1) - w / 2;
-        y = H / 2 + 4.2 * t * Math.sin(t) - hh / 2;
-        ok = x >= 0 && y >= 0 && x + w <= W && y + hh <= H && !placed.some((p) => x < p.x + p.w && x + w > p.x && y < p.y + p.h && y + hh > p.y);
-      }
-      node.style.opacity = ok ? 1 : 0;
-      if (ok) {
-        placed.push({ x, y, w, h: hh });
-        node.style.transform = `translate(${x + 7}px, ${y + 4}px)`;
-      }
+      if (st.nodes.has(word.w)) return;
+      const node = h('span', { text: word.w, style: { color: COLORS[i % 6], transform: `translate(${W / 2}px, ${H / 2}px)`, opacity: 0 } });
+      st.nodes.set(word.w, node);
+      st.box.append(node);
+    });
+    // Раскладываем от центра по спирали. Если хоть одно слово не поместилось, уменьшаем все и пробуем снова:
+    // на экране должны быть видны все ответы, а не только самые частые.
+    let pos = [];
+    for (let scale = 1, attempt = 0; attempt < 12; attempt++, scale *= 0.84) {
+      const placed = [];
+      let allFit = true;
+      pos = d.words.map((word) => {
+        const node = st.nodes.get(word.w);
+        const size = Math.max(11, base * scale * (0.75 + 1.9 * Math.sqrt(word.n / maxN) * (d.words.length > 25 ? 0.8 : 1)));
+        node.style.fontSize = size + 'px';
+        const w = Math.min(node.offsetWidth + 14, W), hh = node.offsetHeight + 8;
+        for (let t = 0; t < 900; t += 0.35) {
+          const x = W / 2 + 4.2 * t * Math.cos(t) * (W / H > 1.4 ? 1.7 : 1) - w / 2;
+          const y = H / 2 + 4.2 * t * Math.sin(t) - hh / 2;
+          if (x >= 0 && y >= 0 && x + w <= W && y + hh <= H && !placed.some((p) => x < p.x + p.w && x + w > p.x && y < p.y + p.h && y + hh > p.y)) {
+            placed.push({ x, y, w, h: hh });
+            return { x, y };
+          }
+        }
+        allFit = false;
+        return null;
+      });
+      if (allFit) break;
+    }
+    d.words.forEach((word, i) => {
+      const node = st.nodes.get(word.w);
+      node.style.opacity = pos[i] ? 1 : 0;
+      if (pos[i]) node.style.transform = `translate(${pos[i].x + 7}px, ${pos[i].y + 4}px)`;
     });
   }
 

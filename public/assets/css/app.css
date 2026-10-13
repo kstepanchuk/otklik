@@ -269,7 +269,10 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .mini-join .qr { width: 4.6em; height: 4.6em; background: #fff; border-radius: .4em; padding: .25em; }
 .qr svg { width: 100%; height: 100%; display: block; }
 .screen-main { min-height: 0; display: grid; grid-template-rows: auto 1fr; gap: 1.4vw; }
-.screen-main .q-text { font: 700 clamp(26px, 3.3vw, 72px)/1.12 var(--display); letter-spacing: -.015em; max-width: 26em; text-wrap: balance; }
+.screen-main .q-text { font: 700 clamp(26px, 3.3vw, 72px)/1.12 var(--display); letter-spacing: -.015em; max-width: 26em; text-wrap: balance; white-space: pre-line; }
+/* Длинный вопрос печатается мельче, чтобы под ним осталось место для ответов. */
+.screen-main .q-text.long { font-size: clamp(20px, 2.3vw, 50px); max-width: 36em; }
+.screen-main .q-text.xlong { font-size: clamp(17px, 1.75vw, 38px); max-width: 46em; }
 .screen-main .viz { min-height: 0; position: relative; }
 /* Слайд без заголовка: вся высота достаётся содержимому. */
 .screen-main .q-text:empty { display: none; }
@@ -370,7 +373,7 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); vertical-al
 .qa-item.done { opacity: .45; text-decoration: line-through; }
 
 .cloud { position: relative; height: 100%; min-height: 12em; overflow: hidden; }
-.cloud span { position: absolute; left: 0; top: 0; font-family: var(--display); font-weight: 700; line-height: 1; white-space: nowrap; transition: transform .7s cubic-bezier(.2, .8, .2, 1), font-size .5s; will-change: transform; }
+.cloud span { position: absolute; left: 0; top: 0; font-family: var(--display); font-weight: 700; line-height: 1; white-space: nowrap; transition: transform .7s cubic-bezier(.2, .8, .2, 1), opacity .4s; will-change: transform; }
 
 .scale-viz { display: grid; grid-template-columns: auto 1fr; gap: 4vw; align-items: center; height: 100%; }
 .big-num { text-align: center; }
