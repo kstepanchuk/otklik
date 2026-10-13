@@ -296,6 +296,8 @@ function api_session_archive(array $in): array
 function api_session_reset(array $in): array
 {
     $s = own_session($in['id'] ?? 0);
+    // Ответы прошлой группы не пропадают: запуск сохраняется в историю и остаётся в отчёте.
+    $run = save_run($s);
     q('DELETE FROM answers WHERE session_id = ?', [$s['id']]);
     q('DELETE FROM participants WHERE session_id = ?', [$s['id']]);
     q('DELETE FROM reactions WHERE session_id = ?', [$s['id']]);
@@ -304,7 +306,7 @@ function api_session_reset(array $in): array
     // Новый код: участники прошлого запуска по старому QR в сессию уже не попадут.
     remove_state($s['code']);
     write_state((int) $s['id']);
-    return ['ok' => true, 'code' => $code];
+    return ['ok' => true, 'code' => $code, 'run' => $run];
 }
 
 function api_question_save(array $in): array

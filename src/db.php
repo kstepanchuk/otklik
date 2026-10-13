@@ -168,6 +168,17 @@ function migrations(): array
             PRIMARY KEY (session_id, user_id)
         );
         ",
+        4 => "
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY,
+            session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            created_at INTEGER NOT NULL,
+            people INTEGER NOT NULL DEFAULT 0,
+            answers INTEGER NOT NULL DEFAULT 0,
+            data TEXT NOT NULL
+        );
+        CREATE INDEX runs_session ON runs (session_id, id);
+        ",
     ];
 }
 

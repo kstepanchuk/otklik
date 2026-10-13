@@ -156,7 +156,7 @@
         h('a', { class: 'btn ghost', href: 'editor.html?id=' + id, text: 'Слайды' }),
         h('a', { class: 'btn ghost', href: 'report.html?id=' + id, text: 'Отчёт' }),
         h('a', { class: 'btn ghost', href: 'api.php?a=export&id=' + id, text: 'Скачать CSV' }),
-        h('button', { class: 'btn danger', type: 'button', text: 'Начать заново', onclick: () => confirmBox('Начать сессию заново?', 'Все ответы, участники и очки удалятся. Слайды останутся, а код и QR сессии сменятся — открытый большой экран нужно будет открыть заново.', 'Удалить ответы и начать заново', async () => { await apiPost('session_reset', { id }); location.reload(); }, true) }))),
+        h('button', { class: 'btn danger', type: 'button', text: 'Начать заново', onclick: () => confirmBox('Начать сессию заново?', 'Сессия очистится для новой группы: участники выйдут, код и QR сменятся. Ответы нынешней группы не пропадут — они сохранятся в отчёте как прошлый запуск. Большой экран нужно будет открыть заново.', 'Сохранить ответы и начать заново', async () => { await apiPost('session_reset', { id }); location.reload(); }, true) }))),
     h('div', { class: 'host' },
       h('div', { class: 'stack' }, h('h3', { text: 'Слайды' }), slides),
       h('div', { class: 'stack' }, counters, stage, controls, upNext,

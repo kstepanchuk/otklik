@@ -240,9 +240,9 @@ function api_results(array $in): array
     return $out;
 }
 
-function api_report(array $in): array
+/** Отчёт по текущему состоянию сессии: все слайды со сводкой. */
+function build_report(array $s): array
 {
-    $s = own_session($in['id'] ?? 0);
     $slides = [];
     foreach (session_questions((int) $s['id']) as $qq) {
         $slides[] = ['q' => public_question($qq, true), 'data' => aggregate($qq, false, true)];
@@ -257,15 +257,82 @@ function api_report(array $in): array
     ];
 }
 
-function api_export(array $in): ?array
+/** Строки таблицы экспорта: по одной на каждый ответ. */
+function export_rows(array $s): array
 {
-    $s = own_session($in['id'] ?? 0);
     $questions = [];
     foreach (session_questions((int) $s['id']) as $i => $qq) {
         $questions[(int) $qq['id']] = $qq + ['n' => $i + 1];
     }
+    $status = ['visible' => 'показан', 'hidden' => 'скрыт', 'pending' => 'на модерации'];
+    $rows = [];
+    $st = q('SELECT a.*, p.name FROM answers a LEFT JOIN participants p ON p.id = a.participant_id WHERE a.session_id = ? ORDER BY a.question_id, a.id', [$s['id']]);
+    while ($a = $st->fetch()) {
+        $qq = $questions[(int) $a['question_id']] ?? null;
+        if (!$qq) {
+            continue;
+        }
+        $rows[] = [
+            $qq['n'], TYPE_NAMES[$qq['type']], $qq['text'], (string) $a['name'], answer_text($qq, json_decode($a['value'], true)), $status[$a['status']] ?? $a['status'],
+            $a['is_correct'] === null ? '' : ((int) $a['is_correct'] ? 'да' : 'нет'), (int) $a['points'], date('Y-m-d H:i:s', (int) $a['created_at']),
+        ];
+    }
+    return $rows;
+}
+
+/**
+ * Сохраняет текущий запуск сессии в историю. Вызывается перед «Начать заново»:
+ * ответы прошлой группы остаются доступны в отчёте и в экспорте.
+ */
+function save_run(array $s): ?int
+{
+    $answers = (int) val('SELECT COUNT(*) FROM answers WHERE session_id = ?', [$s['id']]);
+    if (!$answers) {
+        return null;
+    }
+    $data = build_report($s) + ['rows' => export_rows($s)];
+    q('INSERT INTO runs (session_id, created_at, people, answers, data) VALUES (?, ?, ?, ?, ?)', [
+        $s['id'], time(), $data['joined'], $answers, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
+    $id = last_id();
+    // Храним последние 30 запусков каждой сессии.
+    q('DELETE FROM runs WHERE session_id = ? AND id NOT IN (SELECT id FROM runs WHERE session_id = ? ORDER BY id DESC LIMIT 30)', [$s['id'], $s['id']]);
+    return $id;
+}
+
+function session_runs(array $s): array
+{
+    return array_map(
+        fn($r) => ['id' => (int) $r['id'], 'created_at' => (int) $r['created_at'], 'people' => (int) $r['people'], 'answers' => (int) $r['answers']],
+        rows('SELECT id, created_at, people, answers FROM runs WHERE session_id = ? ORDER BY id DESC', [$s['id']])
+    );
+}
+
+function stored_run(array $s, $runId): array
+{
+    $r = row('SELECT * FROM runs WHERE id = ? AND session_id = ?', [(int) $runId, $s['id']]);
+    if (!$r) {
+        fail('Запуск не найден', 404);
+    }
+    return (json_decode($r['data'], true) ?: []) + ['run' => (int) $r['id'], 'run_at' => (int) $r['created_at']];
+}
+
+function api_report(array $in): array
+{
+    $s = own_session($in['id'] ?? 0);
+    $report = !empty($in['run']) ? stored_run($s, $in['run']) : build_report($s);
+    unset($report['rows']);
+    // Название и код берём актуальные: запуск мог быть сохранён под старым кодом.
+    $report['session'] = session_view($s);
+    return $report + ['runs' => session_runs($s)];
+}
+
+function api_export(array $in): ?array
+{
+    $s = own_session($in['id'] ?? 0);
+    $rows = !empty($in['run']) ? (stored_run($s, $in['run'])['rows'] ?? []) : export_rows($s);
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="otklik-' . $s['code'] . '.csv"');
+    header('Content-Disposition: attachment; filename="otklik-' . $s['code'] . (!empty($in['run']) ? '-run' . (int) $in['run'] : '') . '.csv"');
     $f = fopen('php://output', 'w');
     fwrite($f, "\xEF\xBB\xBF");
     // Защита от формул в Excel: текст, начинающийся со знака формулы, записывается как обычная строка.
@@ -274,20 +341,9 @@ function api_export(array $in): ?array
         $v = (string) $v;
         return $v !== '' && strpbrk($v[0], "=+-@\t\r") !== false && !is_numeric($v) ? "'" . $v : $v;
     };
-    $put = fn(array $r) => fputcsv($f, array_map($safe, $r), ';', '"', '');
-    $put(['Слайд', 'Тип', 'Вопрос', 'Участник', 'Ответ', 'Статус', 'Верно', 'Очки', 'Время']);
-    $status = ['visible' => 'показан', 'hidden' => 'скрыт', 'pending' => 'на модерации'];
-    $st = q('SELECT a.*, p.name FROM answers a LEFT JOIN participants p ON p.id = a.participant_id WHERE a.session_id = ? ORDER BY a.question_id, a.id', [$s['id']]);
-    while ($a = $st->fetch()) {
-        $qq = $questions[(int) $a['question_id']] ?? null;
-        if (!$qq) {
-            continue;
-        }
-        $text = answer_text($qq, json_decode($a['value'], true));
-        $put([
-            $qq['n'], TYPE_NAMES[$qq['type']], $qq['text'], (string) $a['name'], $text, $status[$a['status']] ?? $a['status'],
-            $a['is_correct'] === null ? '' : ((int) $a['is_correct'] ? 'да' : 'нет'), (int) $a['points'], date('Y-m-d H:i:s', (int) $a['created_at']),
-        ]);
+    fputcsv($f, ['Слайд', 'Тип', 'Вопрос', 'Участник', 'Ответ', 'Статус', 'Верно', 'Очки', 'Время'], ';', '"', '');
+    foreach ($rows as $r) {
+        fputcsv($f, array_map($safe, $r), ';', '"', '');
     }
     fclose($f);
     return null;
